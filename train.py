@@ -234,12 +234,12 @@ class MyTrain:
 
         if hasattr(self.model, "my_train_model"):
             self.model.my_train_model(
-                self.dataset, self.batch_size, train_parser, cfg, model_path, logger
+                dataset, self.batch_size, train_parser, cfg, model_path, logger
             )
             yield None
         else:
             for performance in self.my_train_model(
-                train_parser, cfg, model_path, logger
+                dataset, train_parser, cfg, model_path, logger
             ):
                 yield performance
 
@@ -311,8 +311,8 @@ class MyTrain:
         eval_loss: float,
         eval_loss_num: float,
         metric_loss_dict: dict,
-        train_parser: ArgumentParser,
-        cfg: Namespace,
+        train_parser: jsonargparse.ArgumentParser,
+        cfg: jsonargparse.Namespace,
         epoch: int,
         model_path: os.PathLike,
     ) -> dict:
@@ -356,8 +356,9 @@ class MyTrain:
 
     def my_train_model(
         self,
-        train_parser: ArgumentParser,
-        cfg: Namespace,
+        dataset: datasets.Dataset,
+        train_parser: jsonargparse.ArgumentParser,
+        cfg: jsonargparse.Namespace,
         model_path: os.PathLike,
         logger: logging.Logger,
     ) -> Generator:
@@ -402,14 +403,14 @@ class MyTrain:
                 self.my_initialize_model(self.model, self.initializer)
 
         train_dataloader = DataLoader(
-            dataset=self.dataset["train"],
+            dataset=dataset["train"],
             batch_size=self.batch_size,
             collate_fn=lambda examples: examples,
             shuffle=True,
             generator=self.my_generator.torch_c_rng,
         )
         eval_dataloader = DataLoader(
-            dataset=self.dataset["validation"],
+            dataset=dataset["validation"],
             batch_size=self.batch_size,
             collate_fn=lambda examples: examples,
         )

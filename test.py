@@ -61,7 +61,6 @@ class MyTest:
         logger = get_logger(**cfg.logger.as_dict())
 
         logger.info("load dataset")
-        dataset = get_dataset(**cfg.dataset.as_dict())
         dl = DataLoader(
             dataset=dataset["test"],
             batch_size=self.batch_size,
@@ -94,7 +93,7 @@ class MyTest:
             checkpoint = torch.load(
                 self.model_path
                 / "checkpoints"
-                / f"checkpoint-{best_epoch}"
+                / f"checkpoint-{cfg.train.last_epoch}"
                 / "checkpoint.pt",
                 weights_only=False,
             )
