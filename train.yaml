@@ -1,0 +1,30 @@
+train:
+  # output_dir:
+  # trial_name:
+  batch_size: 100
+  num_epochs: 33
+  last_epoch: -1
+  clip_value: 1.0
+  accumulate_steps: 1
+  device: cuda # cuda, cpu
+
+# train components
+initializer:
+  name: kaiming_uniform_ # uniform_, normal_, xavier_uniform_, xavier_normal_, kaiming_uniform_, kaiming_normal_, trunc_normal_
+
+optimizer:
+  name: AdamW # Adadelta, Adafactor, Adagrad, Adam, AdamW, SparseAdam, Adamax, ASGD, LBFGS, NAdam, RAdam, RMSprop, Rprop, SGD
+  learning_rate: 0.0001
+  weight_decay: 0.0
+
+lr_scheduler:
+  name: CosineAnnealingWarmRestarts # CosineAnnealingWarmRestarts, ConstantLR, ReduceLROnPlateau, LRScheduler,
+  warmup_epochs: 3
+  period_epochs: 30
+
+# utils
+generator:
+  seed: 63036
+
+logger:
+  log_level: WARNING # CRITICAL, FATAL, ERROR, WARNING, INFO, DEBUG, NOTSET
