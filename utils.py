@@ -9,6 +9,7 @@ import logging
 import sys
 import json
 from typing import Literal
+import datasets
 
 
 def target_to_epoch(checkpoints_path: os.PathLike, target: str) -> int:
@@ -111,3 +112,18 @@ class SeqTokenizer:
 
     def __call__(self, seq: str) -> np.ndarray:
         return self.int2idx[np.frombuffer(seq.encode(), dtype=np.int8)]
+
+
+def split_train_valid_test(
+    ds: datasets.Dataset, validation_ratio: float, test_ratio: float, seed: int
+) -> datasets.Dataset:
+    ds = ds["train"].train_test_split(
+        test_size=test_ratio + validation_ratio, seed=seed
+    )
+    ds2 = ds.pop("test").train_test_split(
+        test_size=test_ratio / (test_ratio + validation_ratio),
+        seed=seed,
+    )
+    ds["validation"] = ds2.pop("train")
+    ds["test"] = ds2.pop("test")
+    return ds
