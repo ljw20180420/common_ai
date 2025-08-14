@@ -43,3 +43,13 @@ The model can override `MyTrain`'s `my_eval_epoch` method by implementing its ow
 The `MyTest` class test subclass of huggingface `PreTrainedModel`. `MyTest` will load the epoch saved by `MyTrain`.
 1. If the model implement its own `my_train_model` method, then the model also needs to implement the `my_load_model` method for `MyTest` to load the model.
 2. Otherwise, the `load_state_dict` method of the model (maybe overrided by the model) will be used by `MyTest` to load the model.
+
+# Metric
+
+The metric classes should implement three methods.
+1. `__init__` intialized the parameters and metric state.
+2. `step` process the batchs. It receives:
+    - `df`: the data frame returned by the model's `eval_output` method.
+    - `examples`: the examples in the dataset.
+    - `batch`: the batch returned by the model's `data_collator`.
+3. `epoch` accumulate all batch results, reinitialize the metric state and return the final metric.
