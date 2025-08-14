@@ -102,29 +102,52 @@ class MyTest:
             model.eval()
 
         logger.info("test model")
-        metric_dfs, accum_sample_idx = [], 0
+        metric_dfs, accum_sample_idx, dfs = [], 0, []
         for examples in tqdm(dl):
             current_batch_size = len(examples)
             batch = model.data_collator(examples, output_label=True)
             df = model.eval_output(examples, batch)
-            observations = batch["label"]["observation"].cpu().numpy()
-            cut1s = np.array([example["cut1"] for example in examples])
-            cut2s = np.array([example["cut2"] for example in examples])
+            dfs.append(df)
             metric_df = pd.DataFrame({"sample_idx": np.arange(current_batch_size)})
             for metric_name, metric_fun in metrics.items():
+                if (
+                    hasattr(metric_fun, "global_metric")
+                    and metric_fun.global_metric == True
+                ):
+                    continue
                 metric_loss, metric_loss_num = metric_fun(
                     df=df,
-                    observation=observations,
-                    cut1=cut1s,
-                    cut2=cut2s,
+                    examples=examples,
+                    batch=batch,
                 )
                 metric_df[f"{metric_name}_loss"] = metric_loss
                 metric_df[f"{metric_name}_loss_num"] = metric_loss_num
             metric_df["sample_idx"] = metric_df["sample_idx"] + accum_sample_idx
             accum_sample_idx += current_batch_size
             metric_dfs.append(metric_df)
-        logger.info("output results")
+
+        logger.info("output metrics")
         pd.concat(metric_dfs).to_csv(
             self.model_path / "test_result.csv",
             index=False,
+        )
+
+        logger.info("output global metrics")
+        df_global = pd.concat(dfs).reset_index(drop=True)
+        metric_df_global = {"metric_name": [], "metric_loss": []}
+        for metric_name, metric_fun in metrics.items():
+            if (
+                not hasattr(metric_fun, "global_metric")
+                or metric_fun.global_metric == False
+            ):
+                continue
+            metric_loss = metric_fun(
+                df=df_global,
+                examples=examples,
+                batch=batch,
+            )
+            metric_df_global["metric_name"].append(metric_name)
+            metric_df_global["metric_loss"].append(metric_loss)
+        pd.DataFrame(metric_df_global).to_csv(
+            self.model_path / "test_result_global.csv", index=False
         )
