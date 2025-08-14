@@ -268,6 +268,7 @@ class MyTrain:
     def my_train_epoch(
         model: PreTrainedModel,
         train_dataloader: DataLoader,
+        eval_dataloader: DataLoader,
         optimizer: torch.optim.Optimizer,
         my_generator: MyGenerator,
         accumulate_steps: int,
@@ -300,59 +301,57 @@ class MyTrain:
         return train_loss, train_loss_num, grad_norm
 
     @staticmethod
-    def my_save_model(
+    def my_eval_epoch(
         model: PreTrainedModel,
-        optimizer: torch.optim.Optimizer,
+        train_dataloader: DataLoader,
+        eval_dataloader: DataLoader,
+        metrics: dict,
         lr_scheduler: torch.optim.lr_scheduler.LRScheduler,
         my_generator: MyGenerator,
-        train_loss: float,
-        train_loss_num: float,
-        grad_norm: float,
-        eval_loss: float,
-        eval_loss_num: float,
-        metric_loss_dict: dict,
-        train_parser: jsonargparse.ArgumentParser,
-        cfg: jsonargparse.Namespace,
-        epoch: int,
-        model_path: os.PathLike,
-    ) -> dict:
-        model_path = pathlib.Path(os.fspath(model_path))
-        performance = {
-            "train": {
-                "loss": train_loss,
-                "loss_num": train_loss_num,
-                "grad_num": grad_norm,
-            },
-            "eval": {
-                "loss": eval_loss,
-                "loss_num": eval_loss_num,
-                **metric_loss_dict,
-            },
-        }
-        os.makedirs(model_path / "checkpoints" / f"checkpoint-{epoch}", exist_ok=True)
-        cfg.train.last_epoch = epoch
-        train_parser.save(
-            cfg=cfg,
-            path=model_path / "checkpoints" / f"checkpoint-{epoch}" / "train.yaml",
-            overwrite=True,
-        )
-        with open(
-            model_path / "checkpoints" / f"checkpoint-{epoch}" / "performance.json",
-            "w",
-        ) as fd:
-            json.dump(performance, fd, indent=4)
+    ):
+        with torch.no_grad():
+            model.eval()
+            eval_loss, eval_loss_num = 0.0, 0.0
+            metric_loss_dict = {
+                metric_name: {"loss": 0.0, "loss_num": 0.0}
+                for metric_name in metrics.keys()
+            }
+            for examples in tqdm(eval_dataloader):
+                batch = model.data_collator(examples, output_label=True)
+                result = model(
+                    input=batch["input"],
+                    label=batch["label"],
+                    my_generator=my_generator,
+                )
 
-        torch.save(
-            obj={
-                "generator": my_generator.state_dict(),
-                "model": model.state_dict(),
-                "optimizer": optimizer.state_dict(),
-                "lr_scheduler": lr_scheduler.state_dict(),
-            },
-            f=model_path / "checkpoints" / f"checkpoint-{epoch}" / "checkpoint.pt",
-        )
+                eval_loss += result["loss"].item()
+                eval_loss_num += (
+                    result["loss_num"].item()
+                    if torch.is_tensor(result["loss_num"])
+                    else result["loss_num"]
+                )
+                df = model.eval_output(examples, batch)
+                observations = batch["label"]["observation"].cpu().numpy()
+                cut1s = np.array([example["cut1"] for example in examples])
+                cut2s = np.array([example["cut2"] for example in examples])
+                for metric_name, metric_fun in metrics.items():
+                    metric_loss, metric_loss_num = metric_fun(
+                        df=df,
+                        observation=observations,
+                        cut1=cut1s,
+                        cut2=cut2s,
+                    )
+                    metric_loss_dict[metric_name]["loss"] += metric_loss.sum().item()
+                    metric_loss_dict[metric_name][
+                        "loss_num"
+                    ] += metric_loss_num.sum().item()
 
-        return performance
+            if isinstance(lr_scheduler, torch.optim.lr_scheduler.ReduceLROnPlateau):
+                lr_scheduler.step(eval_loss / eval_loss_num)
+            else:
+                lr_scheduler.step()
+
+        return eval_loss, eval_loss_num, metric_loss_dict
 
     def my_train_model(
         self,
@@ -362,9 +361,7 @@ class MyTrain:
         model_path: os.PathLike,
         logger: logging.Logger,
     ) -> Generator:
-        logger.info("train deep learning model")
-
-        logger.info("initialize components")
+        logger.info("instantialize components")
         self.my_generator = MyGenerator(**cfg.generator.as_dict())
 
         self.metrics = {}
@@ -415,99 +412,84 @@ class MyTrain:
             collate_fn=lambda examples: examples,
         )
 
-        logger.info("enter train loop")
+        logger.info("train loop")
         for epoch in tqdm(range(self.last_epoch + 1, self.num_epochs)):
-            logger.info("train model")
+            logger.info(f"train epoch {epoch}")
+            my_train_epoch_args = [
+                train_dataloader,
+                eval_dataloader,
+                self.optimizer,
+                self.my_generator,
+                self.accumulate_steps,
+                self.clip_value,
+            ]
             if hasattr(self.model, "my_train_epoch"):
                 train_loss, train_loss_num, grad_norm = self.model.my_train_epoch(
-                    self.my_train_epoch,
-                    train_dataloader,
-                    eval_dataloader,
-                    self.optimizer,
-                    self.my_generator,
-                    self.accumulate_steps,
-                    self.clip_value,
+                    self.my_train_epoch, *my_train_epoch_args
                 )
             else:
                 train_loss, train_loss_num, grad_norm = self.my_train_epoch(
-                    self.model,
-                    train_dataloader,
-                    self.optimizer,
-                    self.my_generator,
-                    self.accumulate_steps,
-                    self.clip_value,
+                    self.model, *my_train_epoch_args
                 )
+            print({"train_loss": train_loss / train_loss_num})
 
-            logger.info("eval model")
-            with torch.no_grad():
-                self.model.eval()
-                eval_loss, eval_loss_num = 0.0, 0.0
-                metric_loss_dict = {
-                    metric_name: {"loss": 0.0, "loss_num": 0.0}
-                    for metric_name in self.metrics.keys()
-                }
-                for examples in tqdm(eval_dataloader):
-                    batch = self.model.data_collator(examples, output_label=True)
-                    result = self.model(
-                        input=batch["input"],
-                        label=batch["label"],
-                        my_generator=self.my_generator,
-                    )
-
-                    eval_loss += result["loss"].item()
-                    eval_loss_num += (
-                        result["loss_num"].item()
-                        if torch.is_tensor(result["loss_num"])
-                        else result["loss_num"]
-                    )
-                    df = self.model.eval_output(examples, batch)
-                    observations = batch["label"]["observation"].cpu().numpy()
-                    cut1s = np.array([example["cut1"] for example in examples])
-                    cut2s = np.array([example["cut2"] for example in examples])
-                    for metric_name, metric_fun in self.metrics.items():
-                        metric_loss, metric_loss_num = metric_fun(
-                            df=df,
-                            observation=observations,
-                            cut1=cut1s,
-                            cut2=cut2s,
-                        )
-                        metric_loss_dict[metric_name][
-                            "loss"
-                        ] += metric_loss.sum().item()
-                        metric_loss_dict[metric_name][
-                            "loss_num"
-                        ] += metric_loss_num.sum().item()
-
-                if isinstance(
-                    self.lr_scheduler, torch.optim.lr_scheduler.ReduceLROnPlateau
-                ):
-                    self.lr_scheduler.step(eval_loss / eval_loss_num)
-                else:
-                    self.lr_scheduler.step()
-
-                print(
-                    {
-                        "train_loss": train_loss / train_loss_num,
-                        "eval_loss": eval_loss / eval_loss_num,
-                    }
-                )
-
-            logger.info("save model")
-            performance = self.my_save_model(
-                self.model,
-                self.optimizer,
+            logger.info(f"eval epoch {epoch}")
+            my_eval_epoch_args = [
+                train_dataloader,
+                eval_dataloader,
+                self.metrics,
                 self.lr_scheduler,
                 self.my_generator,
-                train_loss,
-                train_loss_num,
-                grad_norm,
-                eval_loss,
-                eval_loss_num,
-                metric_loss_dict,
-                train_parser,
-                cfg,
-                epoch,
-                model_path,
+            ]
+            if hasattr(self.model, "my_eval_epoch"):
+                eval_loss, eval_loss_num, metric_loss_dict = self.model.my_eval_epoch(
+                    self.my_eval_epoch, *my_eval_epoch_args
+                )
+            else:
+                eval_loss, eval_loss_num, metric_loss_dict = self.my_eval_epoch(
+                    self.model, *my_eval_epoch_args
+                )
+            print({"eval_loss": eval_loss / eval_loss_num})
+
+            logger.info(f"save epoch {epoch}")
+            model_path = pathlib.Path(os.fspath(model_path))
+            os.makedirs(
+                model_path / "checkpoints" / f"checkpoint-{epoch}", exist_ok=True
+            )
+
+            cfg.train.last_epoch = epoch
+            train_parser.save(
+                cfg=cfg,
+                path=model_path / "checkpoints" / f"checkpoint-{epoch}" / "train.yaml",
+                overwrite=True,
+            )
+
+            performance = {
+                "train": {
+                    "loss": train_loss,
+                    "loss_num": train_loss_num,
+                    "grad_num": grad_norm,
+                },
+                "eval": {
+                    "loss": eval_loss,
+                    "loss_num": eval_loss_num,
+                    **metric_loss_dict,
+                },
+            }
+            with open(
+                model_path / "checkpoints" / f"checkpoint-{epoch}" / "performance.json",
+                "w",
+            ) as fd:
+                json.dump(performance, fd, indent=4)
+
+            torch.save(
+                obj={
+                    "generator": self.my_generator.state_dict(),
+                    "model": self.model.state_dict(),
+                    "optimizer": self.optimizer.state_dict(),
+                    "lr_scheduler": self.lr_scheduler.state_dict(),
+                },
+                f=model_path / "checkpoints" / f"checkpoint-{epoch}" / "checkpoint.pt",
             )
 
             yield performance
