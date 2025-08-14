@@ -6,7 +6,6 @@ A complete version is available under `src.models.sequence.hyena`.
 import math
 import torch
 import torch.nn as nn
-import torch.nn.functional as F
 from einops import rearrange
 
 

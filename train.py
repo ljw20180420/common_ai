@@ -1,13 +1,11 @@
 import re
 import torch
 from torch import nn
-import numpy as np
 import os
 import pathlib
 from torch.utils.data import DataLoader
 import json
 from typing import Literal, Callable, Generator
-import inspect
 import importlib
 from transformers import PreTrainedModel
 from transformers.trainer_pt_utils import get_parameter_names
@@ -311,11 +309,7 @@ class MyTrain:
     ):
         with torch.no_grad():
             model.eval()
-            eval_loss, eval_loss_num = 0.0, 0.0
-            metric_loss_dict = {
-                metric_name: {"loss": 0.0, "loss_num": 0.0}
-                for metric_name in metrics.keys()
-            }
+            eval_loss, eval_loss_num, metric_loss_dict = 0.0, 0.0, {}
             for examples in tqdm(eval_dataloader):
                 batch = model.data_collator(examples, output_label=True)
                 result = model(
@@ -331,20 +325,15 @@ class MyTrain:
                     else result["loss_num"]
                 )
                 df = model.eval_output(examples, batch)
-                observations = batch["label"]["observation"].cpu().numpy()
-                cut1s = np.array([example["cut1"] for example in examples])
-                cut2s = np.array([example["cut2"] for example in examples])
                 for metric_name, metric_fun in metrics.items():
-                    metric_loss, metric_loss_num = metric_fun(
+                    metric_fun.step(
                         df=df,
-                        observation=observations,
-                        cut1=cut1s,
-                        cut2=cut2s,
+                        examples=examples,
+                        batch=batch,
                     )
-                    metric_loss_dict[metric_name]["loss"] += metric_loss.sum().item()
-                    metric_loss_dict[metric_name][
-                        "loss_num"
-                    ] += metric_loss_num.sum().item()
+
+            for metric_name, metric_fun in metrics.items():
+                metric_loss_dict[metric_name] = metric_fun.epoch()
 
             if isinstance(lr_scheduler, torch.optim.lr_scheduler.ReduceLROnPlateau):
                 lr_scheduler.step(eval_loss / eval_loss_num)
