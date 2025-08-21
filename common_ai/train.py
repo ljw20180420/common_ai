@@ -441,7 +441,6 @@ class MyTrain:
             print({"eval_loss": eval_loss / eval_loss_num})
 
             logger.info(f"save epoch {epoch}")
-            model_path = pathlib.Path(os.fspath(model_path))
             os.makedirs(
                 model_path / "checkpoints" / f"checkpoint-{epoch}", exist_ok=True
             )
