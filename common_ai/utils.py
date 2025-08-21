@@ -103,7 +103,7 @@ class Residual(nn.Module):
 class SeqTokenizer:
     def __init__(self, alphabet: str) -> None:
         self.ascii_code = np.frombuffer(alphabet.encode(), dtype=np.int8)
-        self.int2idx = np.empty(self.ascii_code.max() + 1, dtype=int)
+        self.int2idx = np.zeros(self.ascii_code.max() + 1, dtype=int)
         for i, c in enumerate(self.ascii_code):
             self.int2idx[c] = i
 
