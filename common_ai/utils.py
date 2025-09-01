@@ -35,7 +35,7 @@ def target_to_epoch(checkpoints_path: os.PathLike, target: str) -> int:
             metric_value = performance["eval"]["loss"] / performance["eval"]["loss_num"]
         else:
             metric_value = performance["eval"][target]
-        if metric_value < metric_value_min:
+        if metric_value <= metric_value_min:
             metric_value_min = metric_value
             epoch = int(check_epoch.split("-")[1])
 
