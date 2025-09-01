@@ -4,45 +4,74 @@ This repository contains AI libraries commonly used for all my AI projects.
 
 # Train
 
-The `MyTrain` class train subclass of huggingface `PreTrainedModel`.
+The `MyTrain` class train subclass of huggingface `PreTrainedModel`. `model.state_dict` and `model.load_state_dict` must be consistent.
 
-## `my_train_model`
+```mermaid
+---
+title: MyTrain.__call__
+---
+flowchart TD
+    A[initialize model] --> B{{implement <code>model.my_train_model</code>?}}
+    B -- Yes --> C[<code>model.my_train_model</code>]
+    B -- No --> D[<code>MyTrain.my_train_model</code>]
 
-The `my_train_model` method of `MyTrain` is the main method to train the model. The model can override `MyTrain`'s `my_train_model` method by implementing its own one.
-
-The `my_train_model` has five parts.
-1. Instantialize components include `my_generator`, `initializer`, `optimizer`, `lr_scheduler` and `metrics`.
-2. Either call `my_initialize_model` to initialize model weights or load last epoch checkpoint to recover the states of model and other components in 1.
-3. Train loop.
-    - `my_train_epoch`.
-    - `my_eval_epoch`.
-    - Save epoch checkpoint.
-
-### `my_initialize_model`
-
-The model can override `MyTrain`'s `my_initialize_model` method by implementing its own one.
-
-### Load epoch checkpoint
-
-`MyTrain` call the model's `load_state_dict` method to load checkpoint. Generally, this will be the `load_state_dict` method of `torch.nn.module`. If the model override `torch.nn.module`'s `load_state_dict` method, then it should generally also override the `state_dict` method.
-
-### `my_train_epoch`
-
-The model can override `MyTrain`'s `my_train_epoch` method by implementing its own one.
-
-### `my_eval_epoch`
-
-The model can override `MyTrain`'s `my_eval_epoch` method by implementing its own one.
-
-### Save epoch checkpoint
-
-`MyTrain` call the model's `state_dict` method to save checkpoint.  Generally, this will be the `state_dict` method of `torch.nn.module`. If the model override `torch.nn.module`'s `state_dict` method, then it should generally also override the `load_state_dict` method.
+    subgraph D[<code>MyTrain.my_train_model</code>]
+        E["`
+            initialize:
+                - my_generator
+                - initializer
+                - optimizer
+                - lr_scheduler
+                - metrics
+        `"] --> F{{last epoch is -1?}}
+        F -- yes --> G{{implement <code>model.my_initialize_model</code>?}}
+        G -- yes --> H[<code>model.my_initialize_model</code>]
+        G -- no --> I[<code>MyTrain.my_initialize_model</code>]
+        F -- no --> J["`
+            load:
+                - my_generator
+                - optimizer
+                - lr_scheduler
+        `"] --> K[<code>model.load_state_dict</code>]
+        H --> L[train loop]
+        I --> L
+        K --> L
+    end
+    subgraph L[train loop]
+        M{{implement <code>model.my_train_epoch</code>?}}
+        M -- yes --> N[<code>model.my_train_epoch</code>]
+        M -- no --> O[<code>MyTrain.my_train_epoch</code>]
+        N --> P{{implement <code>model.my_eval_epoch</code>?}}
+        O --> P
+        P -- yes --> Q[<code>model.my_eval_epoch</code>]
+        P -- yes --> R[<code>MyTrain.my_eval_epoch</code>]
+        Q --> S[save current epoch and configuration]
+        R --> S
+        S --> T[save performance] --> U["`
+            save:
+                - my_generator
+                - optimizer
+                - lr_scheduler
+        `"] --> V[<code>model.state_dict</code>]
+    end
+```
 
 # Test
 
-The `MyTest` class test subclass of huggingface `PreTrainedModel`. `MyTest` will load the epoch saved by `MyTrain`.
-1. If the model implement its own `my_train_model` method, then the model also needs to implement the `my_load_model` method for `MyTest` to load the model.
-2. Otherwise, the `load_state_dict` method of the model (maybe overrided by the model) will be used by `MyTest` to load the model.
+The `MyTest` class test subclass of huggingface `PreTrainedModel`. `MyTest` will load the epoch saved by `MyTrain`. If `model.my_train_model` is implemented, then the corresponding `model.my_load_model` is necessary.
+
+```mermaid
+---
+title: MyTest.__call__
+---
+flowchart TD
+    A[initialize metric] --> B[initialize model] --> C{{implement <code>model.my_load_model</code>?}}
+    C -- yes --> D[<code>model.my_load_model</code>]
+    C -- no --> E[<code>model.load_state_dict</code>]
+    D --> F[calculate test metrics]
+    E --> F
+    F --> G[save test metrics]
+```
 
 # Metric
 
