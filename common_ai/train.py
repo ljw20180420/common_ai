@@ -350,6 +350,9 @@ class MyTrain:
         model_path: os.PathLike,
         logger: logging.Logger,
     ) -> Generator:
+        # Move model to the device as soon as possible so that get_optimizer (for Adagrad) and initializer can work correctly.
+        self.model = self.model.to(self.device)
+
         logger.info("instantialize components")
         self.my_generator = MyGenerator(**cfg.generator.as_dict())
 
@@ -364,8 +367,6 @@ class MyTrain:
         self.optimizer = self.get_optimizer(**cfg.optimizer.as_dict())
         self.lr_scheduler = self.get_lr_scheduler(**cfg.lr_scheduler.as_dict())
 
-        # move model to the device so that initializer can work correctly
-        self.model = self.model.to(self.device)
         if self.last_epoch >= 0:
             logger.info("load checkpoint")
             checkpoint = torch.load(

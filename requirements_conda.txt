@@ -1,5 +1,0 @@
-conda-forge::transformers
-conda-forge::jsonargparse
-conda-forge::pytorch
-conda-forge::opt_einsum
-conda-forge::einops
