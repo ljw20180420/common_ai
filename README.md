@@ -11,31 +11,35 @@ The `MyTrain` class train subclass of huggingface `PreTrainedModel`. `model.stat
 title: MyTrain.__call__
 ---
 flowchart TD
-    A[initialize model] --> B{{implement <code>model.my_train_model</code>?}}
-    B -- Yes --> C[<code>model.my_train_model</code>]
-    B -- No --> D[<code>MyTrain.my_train_model</code>]
+    INST[instantiate model] --> MODE{{evaluation only?}}
+    MODE -- yes --> EVALBRANCH{{implement <code>model.my_train_model</code>?}}
+    EVALBRANCH -- no --> EVALMODEL[<code>MyTrain.my_eval_model</code>]
 
-    subgraph D[<code>MyTrain.my_train_model</code>]
-        E["`
-            initialize:
-                - my_generator
-                - initializer
-                - optimizer
-                - lr_scheduler
-                - metrics
-        `"] --> F{{last epoch is -1?}}
+    subgraph EVALMODEL[<code>MyTrain.my_eval_model</code>]
+        INSTCOMPS[<code>MyTrain.instantiate_components</code>] --> EVALLOOP[eval loop]
+    end
+
+    subgraph EVALLOOP[eval loop]
+        CHECKCONSISTENCY[check config consistency] --> EVALLOADCHECKPOINT[<code>My.Train.load_checkpoint</code>] --> EVALEPOCHBRANCH{{implement <code>model.my_eval_epoch</code>?}}
+        EVALEPOCHBRANCH -- yes --> CUSTOMEVAL[<code>model.my_eval_epoch</code>]
+        EVALEPOCHBRANCH -- no --> COMMONEVAL[<code>MyTrain.my_eval_epoch</code>]
+        CUSTOMEVAL --> UPDATECONFIGPERFORM[update configuration and performance]
+        COMMONEVAL --> UPDATECONFIGPERFORM[update configuration and performance]
+    end
+
+    MODE -- no --> TRAINBRANCH{{implement <code>model.my_train_model</code>?}}
+    TRAINBRANCH -- yes --> CUSTOMTRAIN[<code>model.my_train_model</code>]
+    TRAINBRANCH -- no --> COMMONTRAIN[<code>MyTrain.my_train_model</code>]
+
+    subgraph COMMONTRAIN[<code>MyTrain.my_train_model</code>]
+        E[<code>MyTrain.instantiate_components</code>] --> F{{last epoch is -1?}}
         F -- yes --> G{{implement <code>model.my_initialize_model</code>?}}
         G -- yes --> H[<code>model.my_initialize_model</code>]
         G -- no --> I[<code>MyTrain.my_initialize_model</code>]
-        F -- no --> J["`
-            load:
-                - my_generator
-                - optimizer
-                - lr_scheduler
-        `"] --> K[<code>model.load_state_dict</code>]
+        F -- no --> J[<code>MyTrain.load_checkpoint</code>]
         H --> L[train loop]
         I --> L
-        K --> L
+        J --> L
     end
     subgraph L[train loop]
         M{{implement <code>model.my_train_epoch</code>?}}
@@ -44,15 +48,10 @@ flowchart TD
         N --> P{{implement <code>model.my_eval_epoch</code>?}}
         O --> P
         P -- yes --> Q[<code>model.my_eval_epoch</code>]
-        P -- yes --> R[<code>MyTrain.my_eval_epoch</code>]
+        P -- no --> R[<code>MyTrain.my_eval_epoch</code>]
         Q --> S[save current epoch and configuration]
         R --> S
-        S --> T[save performance] --> U["`
-            save:
-                - my_generator
-                - optimizer
-                - lr_scheduler
-        `"] --> V[<code>model.state_dict</code>]
+        S --> T[save performance] --> U[save checkpoint]
     end
 ```
 

@@ -514,7 +514,7 @@ class MyTrain:
         logger.info("instantiate components")
         self.instantiate_components(cfg)
 
-        logger.info("train loop")
+        logger.info("eval loop")
         for epoch in tqdm(range(self.last_epoch + 1, self.num_epochs)):
             logger.info("check config consistency")
             cfg_train = train_parser.parse_path(
@@ -549,7 +549,7 @@ class MyTrain:
                 collate_fn=lambda examples: examples,
             )
 
-            logger.info(f"reeval epoch {epoch}")
+            logger.info(f"eval epoch {epoch}")
             my_eval_epoch_args = [
                 train_dataloader,
                 eval_dataloader,
