@@ -581,13 +581,11 @@ class MyTrain:
             ) as fd:
                 performance = json.load(fd)
 
-            performance["eval"] = (
-                {
-                    "loss": eval_loss,
-                    "loss_num": eval_loss_num,
-                    **metric_loss_dict,
-                },
-            )
+            performance["eval"] = {
+                "loss": eval_loss,
+                "loss_num": eval_loss_num,
+                **metric_loss_dict,
+            }
             with open(
                 model_path / "checkpoints" / f"checkpoint-{epoch}" / "performance.json",
                 "w",

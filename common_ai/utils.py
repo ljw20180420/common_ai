@@ -31,6 +31,7 @@ def target_to_epoch(checkpoints_path: os.PathLike, target: str) -> int:
     for check_epoch in check_epochs:
         with open(checkpoints_path / check_epoch / "performance.json", "r") as fd:
             performance = json.load(fd)
+        breakpoint()
         if target == "loss":
             metric_value = performance["eval"]["loss"] / performance["eval"]["loss_num"]
         else:
