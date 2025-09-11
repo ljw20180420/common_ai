@@ -7,6 +7,7 @@ train:
   clip_value: 1.0
   accumulate_steps: 1
   device: cuda # cuda, cpu
+  evaluation_only: false
 
 # train components
 initializer:

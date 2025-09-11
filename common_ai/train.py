@@ -27,6 +27,7 @@ class MyTrain:
         clip_value: float,
         accumulate_steps: int,
         device: Literal["cpu", "cuda"],
+        evaluation_only: bool,
     ):
         """Train arguments.
 
@@ -39,6 +40,7 @@ class MyTrain:
             clip_value: clip the norm of gradients.
             accumulate_steps: Accumulate gradients for these steps before update parameters.
             device: Device.
+            evaluation_only: Only redo evaluation for existing checkpoints instead of training.
         """
         self.output_dir = pathlib.Path(os.fspath(output_dir))
         self.trial_name = trial_name
@@ -48,6 +50,7 @@ class MyTrain:
         self.clip_value = clip_value
         self.accumulate_steps = accumulate_steps
         self.device = device
+        self.evaluation_only = evaluation_only
 
     def get_initializer(
         self,
@@ -198,15 +201,7 @@ class MyTrain:
             milestones=[warmup_epochs],
         )
 
-    def __call__(
-        self,
-        train_parser: jsonargparse.ArgumentParser,
-        cfg: jsonargparse.Namespace,
-        dataset: datasets.Dataset,
-    ) -> Generator:
-        logger = get_logger(**cfg.logger.as_dict())
-
-        logger.info("load model")
+    def instantiate_model(self, cfg: jsonargparse.Namespace) -> tuple:
         reg_obj = re.search(
             r"^AI\.preprocess\.(.+)\.model\.(.+)Config$", cfg.model.class_path
         )
@@ -220,26 +215,70 @@ class MyTrain:
             / self.trial_name
         )
         model_module = importlib.import_module(f"AI.preprocess.{preprocess}.model")
-        self.model = getattr(model_module, f"{model_type}Model")(
+        model = getattr(model_module, f"{model_type}Model")(
             getattr(model_module, f"{model_type}Config")(
                 **cfg.model.init_args.as_dict(),
             )
         )
         assert (
-            preprocess == self.model.data_collator.preprocess
-            and model_type == self.model.config.model_type
+            preprocess == model.data_collator.preprocess
+            and model_type == model.config.model_type
         ), "preprocess or model type is inconsistent"
 
-        if hasattr(self.model, "my_train_model"):
-            self.model.my_train_model(
-                dataset, self.batch_size, train_parser, cfg, model_path, logger
-            )
-            yield None
+        return model, model_path
+
+    def instantiate_components(self, cfg: jsonargparse.Namespace) -> None:
+        self.my_generator = MyGenerator(**cfg.generator.as_dict())
+
+        self.metrics = {}
+        for metric in cfg.metric:
+            metric_module, metric_cls = metric.class_path.rsplit(".", 1)
+            self.metrics[metric_cls] = getattr(
+                importlib.import_module(metric_module), metric_cls
+            )(**metric.init_args.as_dict())
+
+        self.initializer = self.get_initializer(**cfg.initializer.as_dict())
+        self.optimizer = self.get_optimizer(**cfg.optimizer.as_dict())
+        self.lr_scheduler = self.get_lr_scheduler(**cfg.lr_scheduler.as_dict())
+
+    def load_checkpoint(self, model_path: os.PathLike, epoch: int):
+        model_path = pathlib.Path(os.fspath(model_path))
+        checkpoint = torch.load(
+            model_path / "checkpoints" / f"checkpoint-{epoch}" / "checkpoint.pt",
+            weights_only=False,
+        )
+        self.my_generator.load_state_dict(checkpoint["generator"])
+        self.optimizer.load_state_dict(checkpoint["optimizer"])
+        self.lr_scheduler.load_state_dict(checkpoint["lr_scheduler"])
+        self.model.load_state_dict(checkpoint["model"])
+
+    def __call__(
+        self,
+        train_parser: jsonargparse.ArgumentParser,
+        cfg: jsonargparse.Namespace,
+        dataset: datasets.Dataset,
+    ) -> Generator:
+        logger = get_logger(**cfg.logger.as_dict())
+        logger.info("instantiate model")
+        self.model, model_path = self.instantiate_model(cfg)
+
+        if not self.evaluation_only:
+            if hasattr(self.model, "my_train_model"):
+                self.model.my_train_model(
+                    dataset, self.batch_size, train_parser, cfg, model_path, logger
+                )
+                yield None
+            else:
+                for performance in self.my_train_model(
+                    dataset, train_parser, cfg, model_path, logger
+                ):
+                    yield performance
         else:
-            for performance in self.my_train_model(
-                dataset, train_parser, cfg, model_path, logger
-            ):
-                yield performance
+            if not hasattr(self.model, "my_train_model"):
+                for performance in self.my_eval_model(
+                    dataset, train_parser, cfg, model_path, logger
+                ):
+                    yield performance
 
     @staticmethod
     def my_initialize_model(model: PreTrainedModel, initializer: Callable) -> None:
@@ -353,33 +392,12 @@ class MyTrain:
         # Move model to the device as soon as possible so that get_optimizer (for Adagrad) and initializer can work correctly.
         self.model = self.model.to(self.device)
 
-        logger.info("instantialize components")
-        self.my_generator = MyGenerator(**cfg.generator.as_dict())
-
-        self.metrics = {}
-        for metric in cfg.metric:
-            metric_module, metric_cls = metric.class_path.rsplit(".", 1)
-            self.metrics[metric_cls] = getattr(
-                importlib.import_module(metric_module), metric_cls
-            )(**metric.init_args.as_dict())
-
-        self.initializer = self.get_initializer(**cfg.initializer.as_dict())
-        self.optimizer = self.get_optimizer(**cfg.optimizer.as_dict())
-        self.lr_scheduler = self.get_lr_scheduler(**cfg.lr_scheduler.as_dict())
+        logger.info("instantiate components")
+        self.instantiate_components(cfg)
 
         if self.last_epoch >= 0:
             logger.info("load checkpoint")
-            checkpoint = torch.load(
-                model_path
-                / "checkpoints"
-                / f"checkpoint-{self.last_epoch}"
-                / "checkpoint.pt",
-                weights_only=False,
-            )
-            self.my_generator.load_state_dict(checkpoint["generator"])
-            self.optimizer.load_state_dict(checkpoint["optimizer"])
-            self.lr_scheduler.load_state_dict(checkpoint["lr_scheduler"])
-            self.model.load_state_dict(checkpoint["model"])
+            self.load_checkpoint(model_path, self.last_epoch)
         else:
             logger.info("initialize model weights")
             if hasattr(self.model, "my_initialize_model"):
@@ -480,5 +498,100 @@ class MyTrain:
                 },
                 f=model_path / "checkpoints" / f"checkpoint-{epoch}" / "checkpoint.pt",
             )
+
+            yield performance
+
+    def my_eval_model(
+        self,
+        dataset: datasets.Dataset,
+        train_parser: jsonargparse.ArgumentParser,
+        cfg: jsonargparse.Namespace,
+        model_path: os.PathLike,
+        logger: logging.Logger,
+    ) -> Generator:
+        self.model = self.model.to(self.device)
+
+        logger.info("instantiate components")
+        self.instantiate_components(cfg)
+
+        logger.info("train loop")
+        for epoch in tqdm(range(self.last_epoch + 1, self.num_epochs)):
+            logger.info("check config consistency")
+            cfg_train = train_parser.parse_path(
+                model_path / "checkpoints" / f"checkpoint-{epoch}" / "train.yaml"
+            )
+            for key in cfg.keys():
+                if key in [
+                    "config",
+                    "train.last_epoch",
+                    "train.evaluation_only",
+                    "model.__path__",
+                ]:
+                    continue
+                assert (
+                    cfg[key] == cfg_train[key]
+                ), f"train and evaluation configuration of {key} is not consistent"
+
+            logger.info("load checkpoint")
+            self.load_checkpoint(model_path, epoch)
+
+            logger.info("set dataloader")
+            train_dataloader = DataLoader(
+                dataset=dataset["train"],
+                batch_size=self.batch_size,
+                collate_fn=lambda examples: examples,
+                shuffle=True,
+                generator=self.my_generator.torch_c_rng,
+            )
+            eval_dataloader = DataLoader(
+                dataset=dataset["validation"],
+                batch_size=self.batch_size,
+                collate_fn=lambda examples: examples,
+            )
+
+            logger.info(f"reeval epoch {epoch}")
+            my_eval_epoch_args = [
+                train_dataloader,
+                eval_dataloader,
+                self.metrics,
+                self.lr_scheduler,
+                self.my_generator,
+            ]
+            if hasattr(self.model, "my_eval_epoch"):
+                eval_loss, eval_loss_num, metric_loss_dict = self.model.my_eval_epoch(
+                    self.my_eval_epoch, *my_eval_epoch_args
+                )
+            else:
+                eval_loss, eval_loss_num, metric_loss_dict = self.my_eval_epoch(
+                    self.model, *my_eval_epoch_args
+                )
+            print({"eval_loss": eval_loss / eval_loss_num})
+
+            logger.info(f"update config and evaluation for epoch {epoch}")
+            cfg.train.last_epoch = epoch
+            train_parser.save(
+                cfg=cfg,
+                path=model_path / "checkpoints" / f"checkpoint-{epoch}" / "train.yaml",
+                overwrite=True,
+            )
+
+            with open(
+                model_path / "checkpoints" / f"checkpoint-{epoch}" / "performance.json",
+                "r",
+            ) as fd:
+                performance = json.load(fd)
+
+            performance["eval"] = (
+                {
+                    "loss": eval_loss,
+                    "loss_num": eval_loss_num,
+                    **metric_loss_dict,
+                },
+            )
+            with open(
+                model_path / "checkpoints" / f"checkpoint-{epoch}" / "performance.json",
+                "w",
+            ) as fd:
+                json.dump(performance, fd, indent=4)
 
             yield performance
