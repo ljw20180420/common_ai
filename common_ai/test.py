@@ -117,6 +117,6 @@ class MyTest:
 
         logger.info("output metrics")
         pd.DataFrame(metric_loss_dict).to_csv(
-            self.model_path / "test_result.csv",
+            self.model_path / f"{self.target}_test_result.csv",
             index=False,
         )
