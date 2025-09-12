@@ -526,6 +526,7 @@ class MyTrain:
                     "train.last_epoch",
                     "train.evaluation_only",
                     "model.__path__",
+                    "metric",
                 ]:
                     continue
                 assert (
