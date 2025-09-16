@@ -87,7 +87,7 @@ class MyTest:
             )
         )
         if hasattr(model, "my_load_model"):
-            model.my_load_model(self.model_path)
+            model.my_load_model(self.model_path, self.target)
         else:
             checkpoint = torch.load(
                 self.model_path
