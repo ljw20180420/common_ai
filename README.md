@@ -12,8 +12,7 @@ title: MyTrain.__call__
 ---
 flowchart TD
     INST[instantiate model] --> MODE{{evaluation only?}}
-    MODE -- yes --> EVALBRANCH{{implement <code>model.my_train_model</code>?}}
-    EVALBRANCH -- no --> EVALMODEL[<code>MyTrain.my_eval_model</code>]
+    MODE -- yes --> EVALMODEL[<code>MyTrain.my_eval_model</code>]
 
     subgraph EVALMODEL[<code>MyTrain.my_eval_model</code>]
         INSTCOMPS[<code>MyTrain.instantiate_components</code>] --> EVALLOOP[eval loop]
@@ -27,18 +26,13 @@ flowchart TD
         COMMONEVAL --> UPDATECONFIGPERFORM[update configuration and performance]
     end
 
-    MODE -- no --> TRAINBRANCH{{implement <code>model.my_train_model</code>?}}
-    TRAINBRANCH -- yes --> CUSTOMTRAIN[<code>model.my_train_model</code>]
-    TRAINBRANCH -- no --> COMMONTRAIN[<code>MyTrain.my_train_model</code>]
+    MODE -- no --> COMMONTRAIN[<code>MyTrain.my_train_model</code>]
 
     subgraph COMMONTRAIN[<code>MyTrain.my_train_model</code>]
         E[<code>MyTrain.instantiate_components</code>] --> F{{last epoch is -1?}}
-        F -- yes --> G{{implement <code>model.my_initialize_model</code>?}}
-        G -- yes --> H[<code>model.my_initialize_model</code>]
-        G -- no --> I[<code>MyTrain.my_initialize_model</code>]
+        F -- yes --> I[<code>MyTrain.my_initialize_model</code>]
         F -- no --> J[<code>MyTrain.load_checkpoint</code>]
-        H --> L[train loop]
-        I --> L
+        I --> L[train loop]
         J --> L
     end
     subgraph L[train loop]

@@ -7,7 +7,6 @@ from torch.utils.data import DataLoader
 import json
 from typing import Literal, Callable, Generator
 import importlib
-from transformers import PreTrainedModel
 from transformers.trainer_pt_utils import get_parameter_names
 from tqdm import tqdm
 import logging
@@ -201,6 +200,21 @@ class MyTrain:
             milestones=[warmup_epochs],
         )
 
+    def instantiate_components(self, cfg: jsonargparse.Namespace) -> None:
+        self.my_generator = MyGenerator(**cfg.generator.as_dict())
+
+        self.metrics = {}
+        for metric in cfg.metric:
+            metric_module, metric_cls = metric.class_path.rsplit(".", 1)
+            self.metrics[metric_cls] = getattr(
+                importlib.import_module(metric_module), metric_cls
+            )(**metric.init_args.as_dict())
+
+        if isinstance(self.model, nn.Module):
+            self.initializer = self.get_initializer(**cfg.initializer.as_dict())
+            self.optimizer = self.get_optimizer(**cfg.optimizer.as_dict())
+            self.lr_scheduler = self.get_lr_scheduler(**cfg.lr_scheduler.as_dict())
+
     def instantiate_model(self, cfg: jsonargparse.Namespace) -> tuple:
         reg_obj = re.search(
             r"^AI\.preprocess\.(.+)\.model\.(.+)Config$", cfg.model.class_path
@@ -216,30 +230,14 @@ class MyTrain:
         )
         model_module = importlib.import_module(f"AI.preprocess.{preprocess}.model")
         model = getattr(model_module, f"{model_type}Model")(
-            getattr(model_module, f"{model_type}Config")(
-                **cfg.model.init_args.as_dict(),
-            )
+            **cfg.model.init_args.as_dict(),
         )
         assert (
             preprocess == model.data_collator.preprocess
-            and model_type == model.config.model_type
+            and model_type == model.model_type
         ), "preprocess or model type is inconsistent"
 
         return model, model_path
-
-    def instantiate_components(self, cfg: jsonargparse.Namespace) -> None:
-        self.my_generator = MyGenerator(**cfg.generator.as_dict())
-
-        self.metrics = {}
-        for metric in cfg.metric:
-            metric_module, metric_cls = metric.class_path.rsplit(".", 1)
-            self.metrics[metric_cls] = getattr(
-                importlib.import_module(metric_module), metric_cls
-            )(**metric.init_args.as_dict())
-
-        self.initializer = self.get_initializer(**cfg.initializer.as_dict())
-        self.optimizer = self.get_optimizer(**cfg.optimizer.as_dict())
-        self.lr_scheduler = self.get_lr_scheduler(**cfg.lr_scheduler.as_dict())
 
     def load_checkpoint(self, model_path: os.PathLike, epoch: int):
         model_path = pathlib.Path(os.fspath(model_path))
@@ -247,10 +245,11 @@ class MyTrain:
             model_path / "checkpoints" / f"checkpoint-{epoch}" / "checkpoint.pt",
             weights_only=False,
         )
-        self.my_generator.load_state_dict(checkpoint["generator"])
-        self.optimizer.load_state_dict(checkpoint["optimizer"])
-        self.lr_scheduler.load_state_dict(checkpoint["lr_scheduler"])
         self.model.load_state_dict(checkpoint["model"])
+        self.my_generator.load_state_dict(checkpoint["generator"])
+        if isinstance(self.model, nn.Module):
+            self.optimizer.load_state_dict(checkpoint["optimizer"])
+            self.lr_scheduler.load_state_dict(checkpoint["lr_scheduler"])
 
     def __call__(
         self,
@@ -263,25 +262,18 @@ class MyTrain:
         self.model, model_path = self.instantiate_model(cfg)
 
         if not self.evaluation_only:
-            if hasattr(self.model, "my_train_model"):
-                self.model.my_train_model(
-                    dataset, self.batch_size, train_parser, cfg, model_path, logger
-                )
-                yield None
-            else:
-                for performance in self.my_train_model(
-                    dataset, train_parser, cfg, model_path, logger
-                ):
-                    yield performance
+            for performance in self.my_train_model(
+                dataset, train_parser, cfg, model_path, logger
+            ):
+                yield performance
         else:
-            if not hasattr(self.model, "my_train_model"):
-                for performance in self.my_eval_model(
-                    dataset, train_parser, cfg, model_path, logger
-                ):
-                    yield performance
+            for performance in self.my_eval_model(
+                dataset, train_parser, cfg, model_path, logger
+            ):
+                yield performance
 
     @staticmethod
-    def my_initialize_model(model: PreTrainedModel, initializer: Callable) -> None:
+    def my_initialize_model(model: nn.Module, initializer: Callable) -> None:
         for m in model.modules():
             # linear layers
             if isinstance(m, nn.Linear) or isinstance(m, nn.Bilinear):
@@ -303,7 +295,7 @@ class MyTrain:
 
     @staticmethod
     def my_train_epoch(
-        model: PreTrainedModel,
+        model: object,
         train_dataloader: DataLoader,
         eval_dataloader: DataLoader,
         optimizer: torch.optim.Optimizer,
@@ -339,7 +331,7 @@ class MyTrain:
 
     @staticmethod
     def my_eval_epoch(
-        model: PreTrainedModel,
+        model: object,
         train_dataloader: DataLoader,
         eval_dataloader: DataLoader,
         metrics: dict,
@@ -347,7 +339,8 @@ class MyTrain:
         my_generator: MyGenerator,
     ):
         with torch.no_grad():
-            model.eval()
+            if isinstance(model, nn.Module):
+                model.eval()
             eval_loss, eval_loss_num, metric_loss_dict = 0.0, 0.0, {}
             for examples in tqdm(eval_dataloader):
                 batch = model.data_collator(examples, output_label=True)
@@ -374,10 +367,11 @@ class MyTrain:
             for metric_name, metric_fun in metrics.items():
                 metric_loss_dict[metric_name] = metric_fun.epoch()
 
-            if isinstance(lr_scheduler, torch.optim.lr_scheduler.ReduceLROnPlateau):
-                lr_scheduler.step(eval_loss / eval_loss_num)
-            else:
-                lr_scheduler.step()
+            if isinstance(model, nn.Module):
+                if isinstance(lr_scheduler, torch.optim.lr_scheduler.ReduceLROnPlateau):
+                    lr_scheduler.step(eval_loss / eval_loss_num)
+                else:
+                    lr_scheduler.step()
 
         return eval_loss, eval_loss_num, metric_loss_dict
 
@@ -390,7 +384,8 @@ class MyTrain:
         logger: logging.Logger,
     ) -> Generator:
         # Move model to the device as soon as possible so that get_optimizer (for Adagrad) and initializer can work correctly.
-        self.model = self.model.to(self.device)
+        if isinstance(self.model, nn.Module):
+            self.model = self.model.to(self.device)
 
         logger.info("instantiate components")
         self.instantiate_components(cfg)
@@ -399,12 +394,8 @@ class MyTrain:
             logger.info("load checkpoint")
             self.load_checkpoint(model_path, self.last_epoch)
         else:
-            logger.info("initialize model weights")
-            if hasattr(self.model, "my_initialize_model"):
-                self.model.my_initialize_model(
-                    self.my_initialize_model, self.initializer
-                )
-            else:
+            if isinstance(self.model, nn.Module):
+                logger.info("initialize model weights")
                 self.my_initialize_model(self.model, self.initializer)
 
         train_dataloader = DataLoader(
@@ -489,13 +480,19 @@ class MyTrain:
             ) as fd:
                 json.dump(performance, fd, indent=4)
 
+            obj = {
+                "model": self.model.state_dict(),
+                "generator": self.my_generator.state_dict(),
+            }
+            if isinstance(self.model, nn.Module):
+                obj.update(
+                    {
+                        "optimizer": self.optimizer.state_dict(),
+                        "lr_scheduler": self.lr_scheduler.state_dict(),
+                    }
+                )
             torch.save(
-                obj={
-                    "generator": self.my_generator.state_dict(),
-                    "model": self.model.state_dict(),
-                    "optimizer": self.optimizer.state_dict(),
-                    "lr_scheduler": self.lr_scheduler.state_dict(),
-                },
+                obj=obj,
                 f=model_path / "checkpoints" / f"checkpoint-{epoch}" / "checkpoint.pt",
             )
 
@@ -509,7 +506,8 @@ class MyTrain:
         model_path: os.PathLike,
         logger: logging.Logger,
     ) -> Generator:
-        self.model = self.model.to(self.device)
+        if isinstance(self.model, nn.Module):
+            self.model = self.model.to(self.device)
 
         logger.info("instantiate components")
         self.instantiate_components(cfg)
