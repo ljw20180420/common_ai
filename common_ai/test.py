@@ -4,6 +4,7 @@ import pathlib
 from tqdm import tqdm
 import pandas as pd
 import torch
+from torch import nn
 from torch.utils.data import DataLoader
 from typing import Literal
 import importlib
@@ -37,18 +38,12 @@ class MyTest:
         self,
         train_parser: jsonargparse.ArgumentParser,
     ) -> jsonargparse.Namespace:
-        if os.path.exists(self.model_path / "checkpoints"):
-            best_epoch = target_to_epoch(
-                self.model_path / "checkpoints", target=self.target
-            )
-            cfg = train_parser.parse_path(
-                self.model_path
-                / "checkpoints"
-                / f"checkpoint-{best_epoch}"
-                / "train.yaml"
-            )
-        else:
-            cfg = train_parser.parse_path(self.model_path / "train.yaml")
+        best_epoch = target_to_epoch(
+            self.model_path / "checkpoints", target=self.target
+        )
+        cfg = train_parser.parse_path(
+            self.model_path / "checkpoints" / f"checkpoint-{best_epoch}" / "train.yaml"
+        )
         return cfg
 
     @torch.no_grad()
@@ -82,21 +77,22 @@ class MyTest:
         model_type = reg_obj.group(2)
         model_module = importlib.import_module(f"AI.preprocess.{preprocess}.model")
         model = getattr(model_module, f"{model_type}Model")(
-            getattr(model_module, f"{model_type}Config")(
-                **cfg.model.init_args.as_dict(),
-            )
+            **cfg.model.init_args.as_dict(),
         )
-        if hasattr(model, "my_load_model"):
-            model.my_load_model(self.model_path, self.target)
-        else:
-            checkpoint = torch.load(
-                self.model_path
-                / "checkpoints"
-                / f"checkpoint-{cfg.train.last_epoch}"
-                / "checkpoint.pt",
-                weights_only=False,
-            )
-            model.load_state_dict(checkpoint["model"])
+        assert (
+            preprocess == model.data_collator.preprocess
+            and model_type == model.model_type
+        ), "preprocess or model type is inconsistent"
+
+        checkpoint = torch.load(
+            self.model_path
+            / "checkpoints"
+            / f"checkpoint-{cfg.train.last_epoch}"
+            / "checkpoint.pt",
+            weights_only=False,
+        )
+        model.load_state_dict(checkpoint["model"])
+        if isinstance(model, nn.Module):
             model = model.to(self.device)
             model.eval()
 

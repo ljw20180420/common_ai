@@ -221,13 +221,6 @@ class MyTrain:
         )
         preprocess = reg_obj.group(1)
         model_type = reg_obj.group(2)
-        model_path = (
-            self.output_dir
-            / preprocess
-            / model_type
-            / cfg.dataset.name
-            / self.trial_name
-        )
         model_module = importlib.import_module(f"AI.preprocess.{preprocess}.model")
         model = getattr(model_module, f"{model_type}Model")(
             **cfg.model.init_args.as_dict(),
@@ -236,6 +229,14 @@ class MyTrain:
             preprocess == model.data_collator.preprocess
             and model_type == model.model_type
         ), "preprocess or model type is inconsistent"
+
+        model_path = (
+            self.output_dir
+            / preprocess
+            / model_type
+            / cfg.dataset.name
+            / self.trial_name
+        )
 
         return model, model_path
 
