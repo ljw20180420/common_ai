@@ -211,10 +211,9 @@ class MyTrain:
                 importlib.import_module(metric_module), metric_cls
             )(**metric.init_args.as_dict())
 
-        if isinstance(self.model, nn.Module):
-            self.initializer = self.get_initializer(**cfg.initializer.as_dict())
-            self.optimizer = self.get_optimizer(**cfg.optimizer.as_dict())
-            self.lr_scheduler = self.get_lr_scheduler(**cfg.lr_scheduler.as_dict())
+        self.initializer = self.get_initializer(**cfg.initializer.as_dict())
+        self.optimizer = self.get_optimizer(**cfg.optimizer.as_dict())
+        self.lr_scheduler = self.get_lr_scheduler(**cfg.lr_scheduler.as_dict())
 
     def load_checkpoint(self, model_path: os.PathLike, epoch: int):
         model_path = pathlib.Path(os.fspath(model_path))
@@ -224,9 +223,8 @@ class MyTrain:
         )
         self.model.load_state_dict(checkpoint["model"])
         self.my_generator.load_state_dict(checkpoint["generator"])
-        if isinstance(self.model, nn.Module):
-            self.optimizer.load_state_dict(checkpoint["optimizer"])
-            self.lr_scheduler.load_state_dict(checkpoint["lr_scheduler"])
+        self.optimizer.load_state_dict(checkpoint["optimizer"])
+        self.lr_scheduler.load_state_dict(checkpoint["lr_scheduler"])
 
     def __call__(
         self,
@@ -467,19 +465,13 @@ class MyTrain:
             ) as fd:
                 json.dump(performance, fd, indent=4)
 
-            obj = {
-                "model": self.model.state_dict(),
-                "generator": self.my_generator.state_dict(),
-            }
-            if isinstance(self.model, nn.Module):
-                obj.update(
-                    {
-                        "optimizer": self.optimizer.state_dict(),
-                        "lr_scheduler": self.lr_scheduler.state_dict(),
-                    }
-                )
             torch.save(
-                obj=obj,
+                obj={
+                    "model": self.model.state_dict(),
+                    "generator": self.my_generator.state_dict(),
+                    "optimizer": self.optimizer.state_dict(),
+                    "lr_scheduler": self.lr_scheduler.state_dict(),
+                },
                 f=model_path / "checkpoints" / f"checkpoint-{epoch}" / "checkpoint.pt",
             )
 
