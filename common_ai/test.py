@@ -92,9 +92,10 @@ class MyTest:
             weights_only=False,
         )
         model.load_state_dict(checkpoint["model"])
+
+        setattr(model, "device", self.device)
         if isinstance(model, nn.Module):
             model = model.to(self.device)
-            setattr(model, "device", self.device)
             model.eval()
 
         logger.info("test model")

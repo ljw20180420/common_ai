@@ -385,9 +385,9 @@ class MyTrain:
         logger: logging.Logger,
     ) -> Generator:
         # Move model to the device as soon as possible so that get_optimizer (for Adagrad) and initializer can work correctly.
+        setattr(self.model, "device", self.device)
         if isinstance(self.model, nn.Module):
             self.model = self.model.to(self.device)
-            setattr(self.model, "device", self.device)
 
         logger.info("instantiate components")
         self.instantiate_components(cfg)
@@ -508,9 +508,9 @@ class MyTrain:
         model_path: os.PathLike,
         logger: logging.Logger,
     ) -> Generator:
+        setattr(self.model, "device", self.device)
         if isinstance(self.model, nn.Module):
             self.model = self.model.to(self.device)
-            setattr(self.model, "device", self.device)
 
         logger.info("instantiate components")
         self.instantiate_components(cfg)
