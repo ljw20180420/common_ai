@@ -71,7 +71,7 @@ class MyTest:
 
         logger.info("load model")
         reg_obj = re.search(
-            r"^AI\.preprocess\.(.+)\.model\.(.+)Config$", cfg.model.class_path
+            r"^AI\.preprocess\.(.+)\.model\.(.+)Model$", cfg.model.class_path
         )
         preprocess = reg_obj.group(1)
         model_type = reg_obj.group(2)

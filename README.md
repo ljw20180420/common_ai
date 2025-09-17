@@ -58,12 +58,7 @@ The `MyTest` class test subclass of huggingface `PreTrainedModel`. `MyTest` will
 title: MyTest.__call__
 ---
 flowchart TD
-    A[initialize metric] --> B[initialize model] --> C{{implement <code>model.my_load_model</code>?}}
-    C -- yes --> D[<code>model.my_load_model</code>]
-    C -- no --> E[<code>model.load_state_dict</code>]
-    D --> F[calculate test metrics]
-    E --> F
-    F --> G[save test metrics]
+    A[initialize metric] --> B[initialize model] --> E[<code>model.load_state_dict</code>] --> F[calculate test metrics] --> G[save test metrics]
 ```
 
 # Metric
