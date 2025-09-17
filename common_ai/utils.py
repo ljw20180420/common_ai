@@ -28,12 +28,9 @@ def instantiate_model(cfg: jsonargparse.Namespace) -> tuple:
         preprocess == model.data_collator.preprocess and model_type == model.model_type
     ), "preprocess or model type is inconsistent"
 
+    output_dir = pathlib.Path(os.fspath(cfg.train.output_dir))
     model_path = (
-        cfg.train.output_dir
-        / preprocess
-        / model_type
-        / cfg.dataset.name
-        / cfg.train.trial_name
+        output_dir / preprocess / model_type / cfg.dataset.name / cfg.train.trial_name
     )
 
     return model, model_path
