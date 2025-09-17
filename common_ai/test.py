@@ -10,7 +10,7 @@ from typing import Literal
 import importlib
 import jsonargparse
 import datasets
-from .utils import get_logger, target_to_epoch
+from .utils import instantiate_model, get_logger, target_to_epoch
 
 
 class MyTest:
@@ -70,22 +70,10 @@ class MyTest:
             )(**metric.init_args.as_dict())
 
         logger.info("load model")
-        reg_obj = re.search(
-            r"^AI\.preprocess\.(.+)\.model\.(.+)Model$", cfg.model.class_path
-        )
-        preprocess = reg_obj.group(1)
-        model_type = reg_obj.group(2)
-        model_module = importlib.import_module(f"AI.preprocess.{preprocess}.model")
-        model = getattr(model_module, f"{model_type}Model")(
-            **cfg.model.init_args.as_dict(),
-        )
-        assert (
-            preprocess == model.data_collator.preprocess
-            and model_type == model.model_type
-        ), "preprocess or model type is inconsistent"
+        model, model_path = instantiate_model(cfg)
 
         checkpoint = torch.load(
-            self.model_path
+            model_path
             / "checkpoints"
             / f"checkpoint-{cfg.train.last_epoch}"
             / "checkpoint.pt",

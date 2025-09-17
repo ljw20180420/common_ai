@@ -10,11 +10,38 @@ import sys
 import json
 from typing import Literal
 import datasets
+import importlib
+import jsonargparse
+
+
+def instantiate_model(cfg: jsonargparse.Namespace) -> tuple:
+    reg_obj = re.search(
+        r"^AI\.preprocess\.(.+)\.model\.(.+)Model$", cfg.model.class_path
+    )
+    preprocess = reg_obj.group(1)
+    model_type = reg_obj.group(2)
+    model_module = importlib.import_module(f"AI.preprocess.{preprocess}.model")
+    model = getattr(model_module, f"{model_type}Model")(
+        **cfg.model.init_args.as_dict(),
+    )
+    assert (
+        preprocess == model.data_collator.preprocess and model_type == model.model_type
+    ), "preprocess or model type is inconsistent"
+
+    model_path = (
+        cfg.train.output_dir
+        / preprocess
+        / model_type
+        / cfg.dataset.name
+        / cfg.train.trial_name
+    )
+
+    return model, model_path
 
 
 def target_to_epoch(checkpoints_path: os.PathLike, target: str) -> int:
     """
-    Infer the epoch from either the last checkpoint or the loweset metric (including loss).
+    Infer the epoch with the loweset metric (including loss).
     """
     checkpoints_path = pathlib.Path(os.fspath(checkpoints_path))
     if not os.path.exists(checkpoints_path):

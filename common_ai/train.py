@@ -12,7 +12,7 @@ from tqdm import tqdm
 import logging
 import jsonargparse
 import datasets
-from .utils import get_logger, MyGenerator
+from .utils import instantiate_model, get_logger, MyGenerator
 
 
 class MyTrain:
@@ -215,31 +215,6 @@ class MyTrain:
             self.optimizer = self.get_optimizer(**cfg.optimizer.as_dict())
             self.lr_scheduler = self.get_lr_scheduler(**cfg.lr_scheduler.as_dict())
 
-    def instantiate_model(self, cfg: jsonargparse.Namespace) -> tuple:
-        reg_obj = re.search(
-            r"^AI\.preprocess\.(.+)\.model\.(.+)Model$", cfg.model.class_path
-        )
-        preprocess = reg_obj.group(1)
-        model_type = reg_obj.group(2)
-        model_module = importlib.import_module(f"AI.preprocess.{preprocess}.model")
-        model = getattr(model_module, f"{model_type}Model")(
-            **cfg.model.init_args.as_dict(),
-        )
-        assert (
-            preprocess == model.data_collator.preprocess
-            and model_type == model.model_type
-        ), "preprocess or model type is inconsistent"
-
-        model_path = (
-            self.output_dir
-            / preprocess
-            / model_type
-            / cfg.dataset.name
-            / self.trial_name
-        )
-
-        return model, model_path
-
     def load_checkpoint(self, model_path: os.PathLike, epoch: int):
         model_path = pathlib.Path(os.fspath(model_path))
         checkpoint = torch.load(
@@ -260,7 +235,7 @@ class MyTrain:
     ) -> Generator:
         logger = get_logger(**cfg.logger.as_dict())
         logger.info("instantiate model")
-        self.model, model_path = self.instantiate_model(cfg)
+        self.model, model_path = instantiate_model(cfg)
 
         if not self.evaluation_only:
             for performance in self.my_train_model(
