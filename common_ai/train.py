@@ -6,6 +6,7 @@ import pathlib
 from torch.utils.data import DataLoader
 import json
 from typing import Literal, Callable, Generator
+from numbers import Number
 import importlib
 from transformers.trainer_pt_utils import get_parameter_names
 from tqdm import tqdm
@@ -297,10 +298,14 @@ class MyTrain:
                 ).item()
                 optimizer.step()
                 model.zero_grad()
-            train_loss += result["loss"].item()
+            train_loss += (
+                result["loss"].item()
+                if not isinstance(result["loss"], Number)
+                else result["loss"]
+            )
             train_loss_num += (
                 result["loss_num"].item()
-                if torch.is_tensor(result["loss_num"])
+                if not isinstance(result["loss_num"], Number)
                 else result["loss_num"]
             )
         return train_loss, train_loss_num, grad_norm
@@ -311,7 +316,6 @@ class MyTrain:
         train_dataloader: DataLoader,
         eval_dataloader: DataLoader,
         metrics: dict,
-        lr_scheduler: torch.optim.lr_scheduler.LRScheduler,
         my_generator: MyGenerator,
     ):
         with torch.no_grad():
@@ -326,10 +330,14 @@ class MyTrain:
                     my_generator=my_generator,
                 )
 
-                eval_loss += result["loss"].item()
+                eval_loss += (
+                    result["loss"].item()
+                    if not isinstance(result["loss"], Number)
+                    else result["loss"]
+                )
                 eval_loss_num += (
                     result["loss_num"].item()
-                    if torch.is_tensor(result["loss_num"])
+                    if not isinstance(result["loss_num"], Number)
                     else result["loss_num"]
                 )
                 df = model.eval_output(examples, batch)
@@ -342,12 +350,6 @@ class MyTrain:
 
             for metric_name, metric_fun in metrics.items():
                 metric_loss_dict[metric_name] = metric_fun.epoch()
-
-            if isinstance(model, nn.Module):
-                if isinstance(lr_scheduler, torch.optim.lr_scheduler.ReduceLROnPlateau):
-                    lr_scheduler.step(eval_loss / eval_loss_num)
-                else:
-                    lr_scheduler.step()
 
         return eval_loss, eval_loss_num, metric_loss_dict
 
@@ -414,7 +416,6 @@ class MyTrain:
                 train_dataloader,
                 eval_dataloader,
                 self.metrics,
-                self.lr_scheduler,
                 self.my_generator,
             ]
             if hasattr(self.model, "my_eval_epoch"):
@@ -426,6 +427,15 @@ class MyTrain:
                     self.model, *my_eval_epoch_args
                 )
             print({"eval_loss": eval_loss / eval_loss_num})
+
+            logger.info(f"update learning rate for {epoch}")
+            if isinstance(self.model, nn.Module):
+                if isinstance(
+                    self.lr_scheduler, torch.optim.lr_scheduler.ReduceLROnPlateau
+                ):
+                    self.lr_scheduler.step(eval_loss / eval_loss_num)
+                else:
+                    self.lr_scheduler.step()
 
             logger.info(f"save epoch {epoch}")
             os.makedirs(
@@ -531,7 +541,6 @@ class MyTrain:
                 train_dataloader,
                 eval_dataloader,
                 self.metrics,
-                self.lr_scheduler,
                 self.my_generator,
             ]
             if hasattr(self.model, "my_eval_epoch"):
