@@ -211,9 +211,10 @@ class MyTrain:
                 importlib.import_module(metric_module), metric_cls
             )(**metric.init_args.as_dict())
 
-        self.initializer = self.get_initializer(**cfg.initializer.as_dict())
-        self.optimizer = self.get_optimizer(**cfg.optimizer.as_dict())
-        self.lr_scheduler = self.get_lr_scheduler(**cfg.lr_scheduler.as_dict())
+        if isinstance(self.model, nn.Module):
+            self.initializer = self.get_initializer(**cfg.initializer.as_dict())
+            self.optimizer = self.get_optimizer(**cfg.optimizer.as_dict())
+            self.lr_scheduler = self.get_lr_scheduler(**cfg.lr_scheduler.as_dict())
 
     def load_checkpoint(self, model_path: os.PathLike, epoch: int):
         model_path = pathlib.Path(os.fspath(model_path))
@@ -223,8 +224,9 @@ class MyTrain:
         )
         self.model.load_state_dict(checkpoint["model"])
         self.my_generator.load_state_dict(checkpoint["generator"])
-        self.optimizer.load_state_dict(checkpoint["optimizer"])
-        self.lr_scheduler.load_state_dict(checkpoint["lr_scheduler"])
+        if isinstance(self.model, nn.Module):
+            self.optimizer.load_state_dict(checkpoint["optimizer"])
+            self.lr_scheduler.load_state_dict(checkpoint["lr_scheduler"])
 
     def __call__(
         self,
@@ -268,34 +270,29 @@ class MyTrain:
                 if m.bias is not None:
                     nn.init.constant_(m.bias, 0)
 
-    @staticmethod
     def my_train_epoch(
-        model: object,
-        train_dataloader: DataLoader,
-        eval_dataloader: DataLoader,
-        optimizer: torch.optim.Optimizer,
-        my_generator: MyGenerator,
-        accumulate_steps: int,
-        clip_value: float,
+        self,
     ) -> tuple[float]:
-        model.train()
-        model.zero_grad()  # optimizer.zero_grad() is different when multiple models share a common optimizer
+        self.model.train()
+        self.model.zero_grad()  # optimizer.zero_grad() is different when multiple models share a common optimizer
         train_loss, train_loss_num, grad_norm = 0.0, 0.0, 0.0
-        for step, examples in tqdm(enumerate(train_dataloader)):
-            batch = model.data_collator(examples, output_label=True)
-            result = model(
+        for step, examples in tqdm(enumerate(self.train_dataloader)):
+            batch = self.model.data_collator(examples, output_label=True)
+            result = self.model(
                 input=batch["input"],
                 label=batch["label"],
-                my_generator=my_generator,
+                my_generator=self.my_generator,
             )
 
             result["loss"].backward()
-            if (step + 1) % accumulate_steps == 0 or step == len(train_dataloader):
+            if (step + 1) % self.accumulate_steps == 0 or step == len(
+                self.train_dataloader
+            ):
                 grad_norm += nn.utils.clip_grad_norm_(
-                    parameters=model.parameters(), max_norm=clip_value
+                    parameters=self.model.parameters(), max_norm=self.clip_value
                 ).item()
-                optimizer.step()
-                model.zero_grad()
+                self.optimizer.step()
+                self.model.zero_grad()
             train_loss += (
                 result["loss"].item()
                 if not isinstance(result["loss"], Number)
@@ -308,24 +305,17 @@ class MyTrain:
             )
         return train_loss, train_loss_num, grad_norm
 
-    @staticmethod
-    def my_eval_epoch(
-        model: object,
-        train_dataloader: DataLoader,
-        eval_dataloader: DataLoader,
-        metrics: dict,
-        my_generator: MyGenerator,
-    ):
+    def my_eval_epoch(self):
         with torch.no_grad():
-            if isinstance(model, nn.Module):
-                model.eval()
+            if isinstance(self.model, nn.Module):
+                self.model.eval()
             eval_loss, eval_loss_num, metric_loss_dict = 0.0, 0.0, {}
-            for examples in tqdm(eval_dataloader):
-                batch = model.data_collator(examples, output_label=True)
-                result = model(
+            for examples in tqdm(self.eval_dataloader):
+                batch = self.model.data_collator(examples, output_label=True)
+                result = self.model(
                     input=batch["input"],
                     label=batch["label"],
-                    my_generator=my_generator,
+                    my_generator=self.my_generator,
                 )
 
                 eval_loss += (
@@ -338,15 +328,15 @@ class MyTrain:
                     if not isinstance(result["loss_num"], Number)
                     else result["loss_num"]
                 )
-                df = model.eval_output(examples, batch)
-                for metric_name, metric_fun in metrics.items():
+                df = self.model.eval_output(examples, batch)
+                for metric_name, metric_fun in self.metrics.items():
                     metric_fun.step(
                         df=df,
                         examples=examples,
                         batch=batch,
                     )
 
-            for metric_name, metric_fun in metrics.items():
+            for metric_name, metric_fun in self.metrics.items():
                 metric_loss_dict[metric_name] = metric_fun.epoch()
 
         return eval_loss, eval_loss_num, metric_loss_dict
@@ -375,14 +365,14 @@ class MyTrain:
                 logger.info("initialize model weights")
                 self.my_initialize_model(self.model, self.initializer)
 
-        train_dataloader = DataLoader(
+        self.train_dataloader = DataLoader(
             dataset=dataset["train"],
             batch_size=self.batch_size,
             collate_fn=lambda examples: examples,
             shuffle=True,
             generator=self.my_generator.torch_c_rng,
         )
-        eval_dataloader = DataLoader(
+        self.eval_dataloader = DataLoader(
             dataset=dataset["validation"],
             batch_size=self.batch_size,
             collate_fn=lambda examples: examples,
@@ -391,39 +381,19 @@ class MyTrain:
         logger.info("train loop")
         for epoch in tqdm(range(self.last_epoch + 1, self.num_epochs)):
             logger.info(f"train epoch {epoch}")
-            my_train_epoch_args = [
-                train_dataloader,
-                eval_dataloader,
-                self.optimizer,
-                self.my_generator,
-                self.accumulate_steps,
-                self.clip_value,
-            ]
             if hasattr(self.model, "my_train_epoch"):
-                train_loss, train_loss_num, grad_norm = self.model.my_train_epoch(
-                    self.my_train_epoch, *my_train_epoch_args
-                )
+                train_loss, train_loss_num, grad_norm = self.model.my_train_epoch(self)
             else:
-                train_loss, train_loss_num, grad_norm = self.my_train_epoch(
-                    self.model, *my_train_epoch_args
-                )
+                train_loss, train_loss_num, grad_norm = self.my_train_epoch()
             print({"train_loss": train_loss / train_loss_num})
 
             logger.info(f"eval epoch {epoch}")
-            my_eval_epoch_args = [
-                train_dataloader,
-                eval_dataloader,
-                self.metrics,
-                self.my_generator,
-            ]
             if hasattr(self.model, "my_eval_epoch"):
                 eval_loss, eval_loss_num, metric_loss_dict = self.model.my_eval_epoch(
-                    self.my_eval_epoch, *my_eval_epoch_args
+                    self
                 )
             else:
-                eval_loss, eval_loss_num, metric_loss_dict = self.my_eval_epoch(
-                    self.model, *my_eval_epoch_args
-                )
+                eval_loss, eval_loss_num, metric_loss_dict = self.my_eval_epoch()
             print({"eval_loss": eval_loss / eval_loss_num})
 
             logger.info(f"update learning rate for {epoch}")
@@ -465,13 +435,20 @@ class MyTrain:
             ) as fd:
                 json.dump(performance, fd, indent=4)
 
+            obj = {
+                "model": self.model.state_dict(),
+                "generator": self.my_generator.state_dict(),
+            }
+            if isinstance(self.model, nn.Module):
+                obj.update(
+                    {
+                        "optimizer": self.optimizer.state_dict(),
+                        "lr_scheduler": self.lr_scheduler.state_dict(),
+                    }
+                )
+
             torch.save(
-                obj={
-                    "model": self.model.state_dict(),
-                    "generator": self.my_generator.state_dict(),
-                    "optimizer": self.optimizer.state_dict(),
-                    "lr_scheduler": self.lr_scheduler.state_dict(),
-                },
+                obj=obj,
                 f=model_path / "checkpoints" / f"checkpoint-{epoch}" / "checkpoint.pt",
             )
 
@@ -515,34 +492,26 @@ class MyTrain:
             self.load_checkpoint(model_path, epoch)
 
             logger.info("set dataloader")
-            train_dataloader = DataLoader(
+            self.train_dataloader = DataLoader(
                 dataset=dataset["train"],
                 batch_size=self.batch_size,
                 collate_fn=lambda examples: examples,
                 shuffle=True,
                 generator=self.my_generator.torch_c_rng,
             )
-            eval_dataloader = DataLoader(
+            self.eval_dataloader = DataLoader(
                 dataset=dataset["validation"],
                 batch_size=self.batch_size,
                 collate_fn=lambda examples: examples,
             )
 
             logger.info(f"eval epoch {epoch}")
-            my_eval_epoch_args = [
-                train_dataloader,
-                eval_dataloader,
-                self.metrics,
-                self.my_generator,
-            ]
             if hasattr(self.model, "my_eval_epoch"):
                 eval_loss, eval_loss_num, metric_loss_dict = self.model.my_eval_epoch(
-                    self.my_eval_epoch, *my_eval_epoch_args
+                    self
                 )
             else:
-                eval_loss, eval_loss_num, metric_loss_dict = self.my_eval_epoch(
-                    self.model, *my_eval_epoch_args
-                )
+                eval_loss, eval_loss_num, metric_loss_dict = self.my_eval_epoch()
             print({"eval_loss": eval_loss / eval_loss_num})
 
             logger.info(f"update config and evaluation for epoch {epoch}")
