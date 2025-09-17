@@ -510,6 +510,7 @@ class MyTrain:
     ) -> Generator:
         if isinstance(self.model, nn.Module):
             self.model = self.model.to(self.device)
+            setattr(self.model, "device", self.device)
 
         logger.info("instantiate components")
         self.instantiate_components(cfg)
