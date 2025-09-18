@@ -309,7 +309,7 @@ class MyTrain:
         with torch.no_grad():
             if isinstance(self.model, nn.Module):
                 self.model.eval()
-            eval_loss, eval_loss_num, metric_loss_dict = 0.0, 0.0, {}
+            eval_loss, eval_loss_num = 0.0, 0.0
             for examples in tqdm(self.eval_dataloader):
                 batch = self.model.data_collator(examples, output_label=True)
                 result = self.model(
@@ -336,6 +336,7 @@ class MyTrain:
                         batch=batch,
                     )
 
+            metric_loss_dict = {}
             for metric_name, metric_fun in self.metrics.items():
                 metric_loss_dict[metric_name] = metric_fun.epoch()
 
