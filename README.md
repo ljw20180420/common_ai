@@ -15,11 +15,11 @@ flowchart TD
     MODE -- yes --> EVALMODEL[<code>MyTrain.my_eval_model</code>]
 
     subgraph EVALMODEL[<code>MyTrain.my_eval_model</code>]
-        INSTCOMPS[<code>MyTrain.instantiate_components</code>] --> EVALLOOP[eval loop]
+        INSTCOMPS[instantiate components] --> EVALLOOP[eval loop]
     end
 
     subgraph EVALLOOP[eval loop]
-        CHECKCONSISTENCY[check config consistency] --> EVALLOADCHECKPOINT[<code>My.Train.load_checkpoint</code>] --> EVALEPOCHBRANCH{{implement <code>model.my_eval_epoch</code>?}}
+        CHECKCONSISTENCY[check config consistency] --> EVALLOADCHECKPOINT[load checkpoint] --> EVALEPOCHBRANCH{{implement <code>model.my_eval_epoch</code>?}}
         EVALEPOCHBRANCH -- yes --> CUSTOMEVAL[<code>model.my_eval_epoch</code>]
         EVALEPOCHBRANCH -- no --> COMMONEVAL[<code>MyTrain.my_eval_epoch</code>]
         CUSTOMEVAL --> UPDATECONFIGPERFORM[update configuration and performance]
@@ -29,9 +29,9 @@ flowchart TD
     MODE -- no --> COMMONTRAIN[<code>MyTrain.my_train_model</code>]
 
     subgraph COMMONTRAIN[<code>MyTrain.my_train_model</code>]
-        E[<code>MyTrain.instantiate_components</code>] --> F{{last epoch is -1?}}
-        F -- yes --> I[<code>MyTrain.my_initialize_model</code>]
-        F -- no --> J[<code>MyTrain.load_checkpoint</code>]
+        E[instantiate components] --> F{{last epoch is -1?}}
+        F -- yes --> I[initialize model weights]
+        F -- no --> J[load checkpoint]
         I --> L[train loop]
         J --> L
     end

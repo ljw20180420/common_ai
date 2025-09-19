@@ -23,11 +23,6 @@ def get_config() -> tuple[jsonargparse.ArgumentParser]:
     train_parser = jsonargparse.ArgumentParser(description="Train AI models.")
     train_parser.add_argument("--config", action="config")
     train_parser.add_class_arguments(theclass=MyTrain, nested_key="train")
-    train_parser.add_method_arguments(
-        theclass=MyTrain,
-        themethod="get_lr_scheduler",
-        nested_key="lr_scheduler",
-    )
 
     train_parser.add_function_arguments(
         function=get_logger,
