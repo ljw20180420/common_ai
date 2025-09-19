@@ -71,10 +71,10 @@ class MyTest:
             )(**metric.init_args.as_dict())
 
         logger.info("load model")
-        model, model_path = instantiate_model(cfg)
+        model, _ = instantiate_model(cfg)
 
         checkpoint = torch.load(
-            model_path
+            self.model_path
             / "checkpoints"
             / f"checkpoint-{cfg.train.last_epoch}"
             / "checkpoint.pt",
