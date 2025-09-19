@@ -10,7 +10,8 @@ from typing import Literal
 import importlib
 import jsonargparse
 import datasets
-from .utils import instantiate_model, get_logger, target_to_epoch
+from .utils import instantiate_model, target_to_epoch
+from .logger import get_logger
 
 
 class MyTest:

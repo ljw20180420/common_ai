@@ -1,7 +1,7 @@
 import jsonargparse
 from .train import MyTrain
 from .test import MyTest
-from .utils import get_logger
+from .logger import get_logger
 from .generator import MyGenerator
 from .early_stopping import MyEarlyStopping
 

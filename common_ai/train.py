@@ -12,7 +12,8 @@ from tqdm import tqdm
 import logging
 import jsonargparse
 import datasets
-from .utils import instantiate_model, get_logger
+from .utils import instantiate_model
+from .logger import get_logger
 from .generator import MyGenerator
 from .early_stopping import MyEarlyStopping
 
