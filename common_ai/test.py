@@ -54,24 +54,16 @@ class MyTest:
         dataset: datasets.Dataset,
     ) -> None:
         logger = get_logger(**cfg.logger.as_dict())
+        logger.info("instantiate model")
+        model, _ = instantiate_model(cfg)
 
-        logger.info("load dataset")
-        dl = DataLoader(
-            dataset=dataset["test"],
-            batch_size=self.batch_size,
-            collate_fn=lambda examples: examples,
-        )
-
-        logger.info("load metric")
+        logger.info("instantiate metrics")
         metrics = {}
         for metric in cfg.metric:
             metric_module, metric_cls = metric.class_path.rsplit(".", 1)
             metrics[metric_cls] = getattr(
                 importlib.import_module(metric_module), metric_cls
             )(**metric.init_args.as_dict())
-
-        logger.info("load model")
-        model, _ = instantiate_model(cfg)
 
         checkpoint = torch.load(
             self.model_path
@@ -81,6 +73,13 @@ class MyTest:
             weights_only=False,
         )
         model.load_state_dict(checkpoint["model"])
+
+        logger.info("load dataset")
+        dl = DataLoader(
+            dataset=dataset["test"],
+            batch_size=self.batch_size,
+            collate_fn=lambda examples: examples,
+        )
 
         setattr(model, "device", self.device)
         if isinstance(model, nn.Module):

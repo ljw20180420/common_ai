@@ -15,7 +15,7 @@ flowchart TD
     MODE -- yes --> EVALMODEL[<code>MyTrain.my_eval_model</code>]
 
     subgraph EVALMODEL[<code>MyTrain.my_eval_model</code>]
-        INSTCOMPS[instantiate components] --> EVALLOOP[eval loop]
+        EVALINSTCOMPS[instantiate components] --> EVALINSTMETRICS[instantiate metrics] --> EVALLOOP[eval loop]
     end
 
     subgraph EVALLOOP[eval loop]
@@ -29,13 +29,13 @@ flowchart TD
     MODE -- no --> COMMONTRAIN[<code>MyTrain.my_train_model</code>]
 
     subgraph COMMONTRAIN[<code>MyTrain.my_train_model</code>]
-        E[instantiate components] --> F{{last epoch is -1?}}
-        F -- yes --> I[initialize model weights]
-        F -- no --> J[load checkpoint]
-        I --> L[train loop]
-        J --> L
+        TRAININSTCOMPS[instantiate components] --> TRAININSTMETRICS[instantiate metrics] --> CONTINUETRAIN{{last epoch is -1?}}
+        CONTINUETRAIN -- yes --> INITWEIGHT[initialize model weights]
+        CONTINUETRAIN -- no --> TRAINLOADCHECK[load checkpoint]
+        INITWEIGHT --> TRAINLOOP[train loop]
+        TRAINLOADCHECK --> TRAINLOOP
     end
-    subgraph L[train loop]
+    subgraph TRAINLOOP[train loop]
         M{{implement <code>model.my_train_epoch</code>?}}
         M -- yes --> N[<code>model.my_train_epoch</code>]
         M -- no --> O[<code>MyTrain.my_train_epoch</code>]
@@ -43,9 +43,9 @@ flowchart TD
         O --> P
         P -- yes --> Q[<code>model.my_eval_epoch</code>]
         P -- no --> R[<code>MyTrain.my_eval_epoch</code>]
-        Q --> S[save current epoch and configuration]
-        R --> S
-        S --> T[save performance] --> U[save checkpoint]
+        Q --> UPDATELR[update learning rate]
+        R --> UPDATELR
+        UPDATELR --> S[save current epoch and configuration] --> T[save performance] --> U[save checkpoint] --> EARLYSTOP[check early stopping]
     end
 ```
 
@@ -58,7 +58,7 @@ The `MyTest` class test subclass of huggingface `PreTrainedModel`. `MyTest` will
 title: MyTest.__call__
 ---
 flowchart TD
-    A[initialize metric] --> B[initialize model] --> E[<code>model.load_state_dict</code>] --> F[calculate test metrics] --> G[save test metrics]
+    INSTMODEL[instantiate model] --> INSTMETRIC[instantiate metrics] --> LOADCHECK[load checkpoint] --> F[calculate test metrics] --> G[save test metrics]
 ```
 
 # Metric

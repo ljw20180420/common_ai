@@ -172,14 +172,6 @@ class MyTrain:
         if isinstance(model, nn.Module):
             model = model.to(self.device)
 
-        logger.info("instantiate metrics")
-        metrics = {}
-        for metric in cfg.metric:
-            metric_module, metric_cls = metric.class_path.rsplit(".", 1)
-            metrics[metric_cls] = getattr(
-                importlib.import_module(metric_module), metric_cls
-            )(**metric.init_args.as_dict())
-
         logger.info("instantiate components")
         my_generator = MyGenerator(**cfg.generator.as_dict())
         my_optimizer = MyOptimizer(**cfg.optimizer.as_dict())
@@ -187,6 +179,14 @@ class MyTrain:
         if isinstance(model, nn.Module):
             my_optimizer(model)
             my_lr_scheduler(my_optimizer)
+
+        logger.info("instantiate metrics")
+        metrics = {}
+        for metric in cfg.metric:
+            metric_module, metric_cls = metric.class_path.rsplit(".", 1)
+            metrics[metric_cls] = getattr(
+                importlib.import_module(metric_module), metric_cls
+            )(**metric.init_args.as_dict())
 
         if self.last_epoch >= 0:
             logger.info("load checkpoint")
@@ -321,6 +321,9 @@ class MyTrain:
         if isinstance(model, nn.Module):
             model = model.to(self.device)
 
+        logger.info("instantiate components")
+        my_generator = MyGenerator(**cfg.generator.as_dict())
+
         logger.info("instantiate metrics")
         metrics = {}
         for metric in cfg.metric:
@@ -328,9 +331,6 @@ class MyTrain:
             metrics[metric_cls] = getattr(
                 importlib.import_module(metric_module), metric_cls
             )(**metric.init_args.as_dict())
-
-        logger.info("instantiate components")
-        my_generator = MyGenerator(**cfg.generator.as_dict())
 
         logger.info("eval loop")
         for epoch in tqdm(range(self.last_epoch + 1, self.num_epochs)):
