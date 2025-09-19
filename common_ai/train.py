@@ -1,4 +1,3 @@
-import re
 import torch
 from torch import nn
 import os
@@ -14,6 +13,7 @@ import logging
 import jsonargparse
 import datasets
 from .utils import instantiate_model, get_logger, MyGenerator
+from .early_stopping import MyEarlyStopping
 
 
 class MyTrain:
@@ -380,6 +380,7 @@ class MyTrain:
         )
 
         logger.info("train loop")
+        my_early_stopping = MyEarlyStopping(**cfg.early_stopping.as_dict())
         for epoch in tqdm(range(self.last_epoch + 1, self.num_epochs)):
             logger.info(f"train epoch {epoch}")
             if hasattr(self.model, "my_train_epoch"):
@@ -454,6 +455,10 @@ class MyTrain:
             )
 
             yield performance
+
+            if my_early_stopping(eval_loss / eval_loss_num):
+                logger.info(f"Early stop at epoch {epoch}")
+                break
 
     def my_eval_model(
         self,

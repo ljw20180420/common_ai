@@ -2,6 +2,7 @@ import jsonargparse
 from .train import MyTrain
 from .test import MyTest
 from .utils import MyGenerator, get_logger
+from .early_stopping import MyEarlyStopping
 
 
 def get_config() -> tuple[jsonargparse.ArgumentParser]:
@@ -42,6 +43,11 @@ def get_config() -> tuple[jsonargparse.ArgumentParser]:
         function=get_logger,
         nested_key="logger",
     )
+    train_parser.add_class_arguments(
+        theclass=MyEarlyStopping,
+        nested_key="early_stopping",
+    )
+
     subcommands.add_subcommand(name="train", parser=train_parser)
 
     return parser, train_parser, test_parser
