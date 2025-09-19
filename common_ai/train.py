@@ -183,7 +183,7 @@ class MyTrain:
         logger.info("instantiate components")
         my_generator = MyGenerator(**cfg.generator.as_dict())
         my_optimizer = MyOptimizer(**cfg.optimizer.as_dict())
-        my_lr_scheduler = MyLrScheduler(**cfg.optimizer.as_dict())
+        my_lr_scheduler = MyLrScheduler(**cfg.lr_scheduler.as_dict())
         if isinstance(model, nn.Module):
             my_optimizer(model)
             my_lr_scheduler(my_optimizer)
