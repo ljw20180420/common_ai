@@ -3,6 +3,7 @@ from .train import MyTrain
 from .test import MyTest
 from .logger import get_logger
 from .generator import MyGenerator
+from .initializer import MyInitializer
 from .early_stopping import MyEarlyStopping
 
 
@@ -22,11 +23,6 @@ def get_config() -> tuple[jsonargparse.ArgumentParser]:
     train_parser.add_class_arguments(theclass=MyTrain, nested_key="train")
     train_parser.add_method_arguments(
         theclass=MyTrain,
-        themethod="get_initializer",
-        nested_key="initializer",
-    )
-    train_parser.add_method_arguments(
-        theclass=MyTrain,
         themethod="get_optimizer",
         nested_key="optimizer",
     )
@@ -36,13 +32,17 @@ def get_config() -> tuple[jsonargparse.ArgumentParser]:
         nested_key="lr_scheduler",
     )
 
+    train_parser.add_function_arguments(
+        function=get_logger,
+        nested_key="logger",
+    )
     train_parser.add_class_arguments(
         theclass=MyGenerator,
         nested_key="generator",
     )
-    train_parser.add_function_arguments(
-        function=get_logger,
-        nested_key="logger",
+    train_parser.add_class_arguments(
+        theclass=MyInitializer,
+        nested_key="initializer",
     )
     train_parser.add_class_arguments(
         theclass=MyEarlyStopping,
