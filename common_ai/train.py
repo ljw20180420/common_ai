@@ -13,8 +13,10 @@ import logging
 import jsonargparse
 import datasets
 from .utils import instantiate_model
+
 from .logger import get_logger
 from .generator import MyGenerator
+from .initializer import MyInitializer
 from .early_stopping import MyEarlyStopping
 
 
@@ -53,32 +55,6 @@ class MyTrain:
         self.accumulate_steps = accumulate_steps
         self.device = device
         self.evaluation_only = evaluation_only
-
-    def get_initializer(
-        self,
-        name: Literal[
-            "uniform_",
-            "normal_",
-            "xavier_uniform_",
-            "xavier_normal_",
-            "kaiming_uniform_",
-            "kaiming_normal_",
-            "trunc_normal_",
-        ],
-    ) -> Callable:
-        """Initializer arguments.
-
-        Args:
-            name: Name of the intialization method for model weights.
-        """
-        generator = self.my_generator.get_torch_generator_by_device(self.device)
-        if name == "uniform_":
-            return lambda tensor, generator=generator: nn.init.uniform_(
-                tensor=tensor, a=-1.0, b=1.0, generator=generator
-            )
-        return lambda tensor, generator=generator: getattr(nn.init, name)(
-            tensor=tensor, generator=generator
-        )
 
     def get_optimizer(
         self,
@@ -214,7 +190,6 @@ class MyTrain:
             )(**metric.init_args.as_dict())
 
         if isinstance(self.model, nn.Module):
-            self.initializer = self.get_initializer(**cfg.initializer.as_dict())
             self.optimizer = self.get_optimizer(**cfg.optimizer.as_dict())
             self.lr_scheduler = self.get_lr_scheduler(**cfg.lr_scheduler.as_dict())
 
@@ -250,27 +225,6 @@ class MyTrain:
                 dataset, train_parser, cfg, model_path, logger
             ):
                 yield performance
-
-    @staticmethod
-    def my_initialize_model(model: nn.Module, initializer: Callable) -> None:
-        for m in model.modules():
-            # linear layers
-            if isinstance(m, nn.Linear) or isinstance(m, nn.Bilinear):
-                initializer(m.weight)
-                if m.bias is not None:
-                    nn.init.constant_(m.bias, 0)
-            # (transposed) convolution layers
-            if (
-                isinstance(m, nn.Conv1d)
-                or isinstance(m, nn.Conv2d)
-                or isinstance(m, nn.Conv3d)
-                or isinstance(m, nn.ConvTranspose1d)
-                or isinstance(m, nn.ConvTranspose2d)
-                or isinstance(m, nn.ConvTranspose3d)
-            ):
-                initializer(m.weight)
-                if m.bias is not None:
-                    nn.init.constant_(m.bias, 0)
 
     def my_train_epoch(
         self,
@@ -366,7 +320,8 @@ class MyTrain:
         else:
             if isinstance(self.model, nn.Module):
                 logger.info("initialize model weights")
-                self.my_initialize_model(self.model, self.initializer)
+                my_initializer = MyInitializer(**cfg.initializer.as_dict())
+                my_initializer(self.model, self.my_generator)
 
         self.train_dataloader = DataLoader(
             dataset=dataset["train"],
