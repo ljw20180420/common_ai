@@ -289,7 +289,7 @@ class MyTrain:
                 "model": model.state_dict(),
                 "generator": my_generator.state_dict(),
             }
-            if isinstance(self.model, nn.Module):
+            if isinstance(model, nn.Module):
                 obj.update(
                     {
                         "optimizer": my_optimizer.state_dict(),
