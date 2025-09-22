@@ -12,6 +12,7 @@ import jsonargparse
 import datasets
 from .utils import instantiate_model, target_to_epoch
 from .logger import get_logger
+from .generator import MyGenerator
 
 
 class MyTest:
@@ -57,6 +58,14 @@ class MyTest:
         logger.info("instantiate model")
         model, _ = instantiate_model(cfg)
 
+        setattr(model, "device", self.device)
+        if isinstance(model, nn.Module):
+            model = model.to(self.device)
+            model.eval()
+
+        logger.info("instantiate components")
+        my_generator = MyGenerator(**cfg.generator.as_dict())
+
         logger.info("instantiate metrics")
         metrics = {}
         for metric in cfg.metric:
@@ -65,6 +74,7 @@ class MyTest:
                 importlib.import_module(metric_module), metric_cls
             )(**metric.init_args.as_dict())
 
+        logger.info("load checkpoint")
         checkpoint = torch.load(
             self.model_path
             / "checkpoints"
@@ -73,6 +83,7 @@ class MyTest:
             weights_only=False,
         )
         model.load_state_dict(checkpoint["model"])
+        my_generator.load_state_dict(checkpoint["generator"])
 
         logger.info("load dataset")
         dl = DataLoader(
@@ -81,15 +92,12 @@ class MyTest:
             collate_fn=lambda examples: examples,
         )
 
-        setattr(model, "device", self.device)
-        if isinstance(model, nn.Module):
-            model = model.to(self.device)
-            model.eval()
-
         logger.info("test model")
         for examples in tqdm(dl):
-            batch = model.data_collator(examples, output_label=True)
-            df = model.eval_output(examples, batch)
+            batch = model.data_collator(
+                examples, output_label=True, my_generator=my_generator
+            )
+            df = model.eval_output(examples, batch, my_generator)
             for metric_name, metric_fun in metrics.items():
                 metric_fun.step(
                     df=df,

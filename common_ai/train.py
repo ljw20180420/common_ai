@@ -89,7 +89,9 @@ class MyTrain:
         model.zero_grad()  # optimizer.zero_grad() is different when multiple models share a common optimizer
         train_loss, train_loss_num, grad_norm = 0.0, 0.0, 0.0
         for step, examples in tqdm(enumerate(train_dataloader)):
-            batch = model.data_collator(examples, output_label=True)
+            batch = model.data_collator(
+                examples, output_label=True, my_generator=my_generator
+            )
             result = model(
                 input=batch["input"],
                 label=batch["label"],
@@ -127,7 +129,9 @@ class MyTrain:
                 model.eval()
             eval_loss, eval_loss_num = 0.0, 0.0
             for examples in tqdm(eval_dataloader):
-                batch = model.data_collator(examples, output_label=True)
+                batch = model.data_collator(
+                    examples, output_label=True, my_generator=my_generator
+                )
                 result = model(
                     input=batch["input"],
                     label=batch["label"],
@@ -144,7 +148,7 @@ class MyTrain:
                     if not isinstance(result["loss_num"], Number)
                     else result["loss_num"]
                 )
-                df = model.eval_output(examples, batch)
+                df = model.eval_output(examples, batch, my_generator)
                 for metric_name, metric_fun in metrics.items():
                     metric_fun.step(
                         df=df,
