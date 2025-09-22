@@ -208,9 +208,11 @@ class MyTrain:
                 my_optimizer.load_state_dict(checkpoint["optimizer"])
                 my_lr_scheduler.load_state_dict(checkpoint["lr_scheduler"])
         else:
-            if isinstance(model, nn.Module):
-                logger.info("initialize model weights")
-                my_initializer = MyInitializer(**cfg.initializer.as_dict())
+            logger.info("initialize model weights")
+            my_initializer = MyInitializer(**cfg.initializer.as_dict())
+            if hasattr(model, "my_initialize_model"):
+                model.my_initialize_model(my_initializer, my_generator)
+            else:
                 my_initializer(model, my_generator)
 
         train_dataloader = torch.utils.data.DataLoader(

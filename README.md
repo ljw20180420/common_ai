@@ -30,9 +30,11 @@ flowchart TD
 
     subgraph COMMONTRAIN[<code>MyTrain.my_train_model</code>]
         TRAININSTCOMPS[instantiate components] --> TRAININSTMETRICS[instantiate metrics] --> CONTINUETRAIN{{last epoch is -1?}}
-        CONTINUETRAIN -- yes --> INITWEIGHT[initialize model weights]
+        CONTINUETRAIN -- yes --> HASINIT{{implement <code>model.my_initialize_model</code>?}} -- yes --> CUSTOMINIT{{<code>model.my_initialize_model</code>?}}
+        HASINIT -- no --> INITWEIGHT[initialize model weights by <code>my_initializer</code>]
         CONTINUETRAIN -- no --> TRAINLOADCHECK[load checkpoint]
-        INITWEIGHT --> TRAINLOOP[train loop]
+        CUSTOMINIT --> TRAINLOOP[train loop]
+        INITWEIGHT --> TRAINLOOP
         TRAINLOADCHECK --> TRAINLOOP
     end
     subgraph TRAINLOOP[train loop]
@@ -58,7 +60,7 @@ The `MyTest` class test subclass of huggingface `PreTrainedModel`. `MyTest` will
 title: MyTest.__call__
 ---
 flowchart TD
-    INSTMODEL[instantiate model] --> INSTMETRIC[instantiate metrics] --> LOADCHECK[load checkpoint] --> F[calculate test metrics] --> G[save test metrics]
+    INSTMODEL[instantiate model] --> INSTCOMP[instantiate components] --> INSTMETRIC[instantiate metrics] --> LOADCHECK[load checkpoint] --> F[calculate test metrics] --> G[save test metrics]
 ```
 
 # Metric
