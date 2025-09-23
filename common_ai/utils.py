@@ -66,7 +66,7 @@ def target_to_epoch(model_path: os.PathLike, target: str) -> int:
         for column in df_eval.columns:
             df_train[column] = df_eval[column]
 
-    epoch = df_train.iloc[df_train[f"eval/{target}"].argmin(), "step"].item()
+    epoch = df_train["step"].iloc[df_train[f"eval/{target}"].argmin()].item()
 
     return epoch
 
