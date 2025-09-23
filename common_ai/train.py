@@ -254,7 +254,7 @@ class MyTrain:
         my_early_stopping = MyEarlyStopping(**cfg.early_stopping.as_dict())
 
         logger.info("open tensorboard writer")
-        tensorboard_writer = SummaryWriter(model_path / "log")
+        tensorboard_writer = SummaryWriter(model_path / "log" / "train")
 
         logger.info("train loop")
         for epoch in tqdm(range(self.last_epoch + 1, self.num_epochs)):
@@ -360,7 +360,7 @@ class MyTrain:
         logger: logging.Logger,
     ) -> None:
         logger.info("open tensorboard writer")
-        tensorboard_writer = SummaryWriter(model_path / "log")
+        tensorboard_writer = SummaryWriter(model_path / "log" / "eval")
 
         logger.info("eval loop")
         for epoch in tqdm(range(self.last_epoch + 1, self.num_epochs)):

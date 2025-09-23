@@ -8,6 +8,7 @@ import json
 import datasets
 import importlib
 import jsonargparse
+from tbparse import SummaryReader
 
 
 def instantiate_model(cfg: jsonargparse.Namespace) -> tuple:
@@ -32,32 +33,40 @@ def instantiate_model(cfg: jsonargparse.Namespace) -> tuple:
     return model, model_path
 
 
-def target_to_epoch(checkpoints_path: os.PathLike, target: str) -> int:
+def target_to_epoch(model_path: os.PathLike, target: str) -> int:
     """
     Infer the epoch with the loweset metric (including loss).
     """
-    checkpoints_path = pathlib.Path(os.fspath(checkpoints_path))
-    if not os.path.exists(checkpoints_path):
-        return -1
-    check_epochs = [
-        check_epoch
-        for check_epoch in os.listdir(checkpoints_path)
-        if re.search(r"^checkpoint-(\d+)$", check_epoch)
-    ]
-    if len(check_epochs) == 0:
-        return -1
 
-    metric_value_min = np.inf
-    for check_epoch in check_epochs:
-        with open(checkpoints_path / check_epoch / "performance.json", "r") as fd:
-            performance = json.load(fd)
-        if target == "loss":
-            metric_value = performance["eval"]["loss"] / performance["eval"]["loss_num"]
-        else:
-            metric_value = performance["eval"][target]
-        if metric_value <= metric_value_min:
-            metric_value_min = metric_value
-            epoch = int(check_epoch.split("-")[1])
+    def get_latest_event_file(logdir: os.PathLike) -> tuple[pathlib.Path, int]:
+        reg_obj = re.compile(r"^events\.out\.tfevents\.(\d+)\.")
+        logdir = pathlib.Path(os.fspath(logdir))
+        latest_time = 0
+        for event_file in os.listdir(logdir):
+            mat = reg_obj.search(event_file)
+            assert mat is not None, "cannot deteramine latest_event_file"
+            current_file_time = int(mat.group(1))
+            if current_file_time > latest_time:
+                latest_time = current_file_time
+                latest_event_file = event_file
+
+        return logdir / latest_event_file, latest_time
+
+    model_path = pathlib.Path(os.fspath(model_path))
+    latest_event_file_train, latest_time_train = get_latest_event_file(
+        model_path / "log" / "train"
+    )
+    latest_event_file_eval, latest_time_eval = get_latest_event_file(
+        model_path / "log" / "eval"
+    )
+
+    df_train = SummaryReader(latest_event_file_train.as_posix(), pivot=True).scalars
+    if latest_time_eval > latest_time_train:
+        df_eval = SummaryReader(latest_event_file_eval.as_posix(), pivot=True).scalars
+        for column in df_eval.columns:
+            df_train[column] = df_eval[column]
+
+    epoch = df_train.iloc[df_train[f"eval/{target}"].argmin(), "step"].item()
 
     return epoch
 

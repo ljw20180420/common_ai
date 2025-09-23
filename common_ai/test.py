@@ -41,9 +41,7 @@ class MyTest:
         self,
         train_parser: jsonargparse.ArgumentParser,
     ) -> jsonargparse.Namespace:
-        best_epoch = target_to_epoch(
-            self.model_path / "checkpoints", target=self.target
-        )
+        best_epoch = target_to_epoch(self.model_path, target=self.target)
         cfg = train_parser.parse_path(
             self.model_path / "checkpoints" / f"checkpoint-{best_epoch}" / "train.yaml"
         )
@@ -106,7 +104,7 @@ class MyTest:
                 )
 
         logger.info("save metrics")
-        tensorboard_writer = SummaryWriter(self.model_path / "log")
+        tensorboard_writer = SummaryWriter(self.model_path / "log" / "test")
         for metric_name, metric_fun in metrics.items():
             tensorboard_writer.add_scalar(
                 f"test/{metric_name}", metric_fun.epoch(), cfg.train.last_epoch
