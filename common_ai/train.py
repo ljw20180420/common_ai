@@ -5,8 +5,8 @@ import os
 import pathlib
 from torch.utils.data import DataLoader
 from torch.utils.tensorboard import SummaryWriter
-import json
-from typing import Literal, Generator
+import shutil
+from typing import Literal
 from numbers import Number
 import importlib
 from tqdm import tqdm
@@ -254,6 +254,7 @@ class MyTrain:
         my_early_stopping = MyEarlyStopping(**cfg.early_stopping.as_dict())
 
         logger.info("open tensorboard writer")
+        shutil.rmtree(model_path / "log" / "train")
         tensorboard_writer = SummaryWriter(model_path / "log" / "train")
 
         logger.info("train loop")
@@ -360,6 +361,7 @@ class MyTrain:
         logger: logging.Logger,
     ) -> None:
         logger.info("open tensorboard writer")
+        shutil.rmtree(model_path / "log" / "eval")
         tensorboard_writer = SummaryWriter(model_path / "log" / "eval")
 
         logger.info("eval loop")

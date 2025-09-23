@@ -1,8 +1,7 @@
-import re
 import os
 import pathlib
 from tqdm import tqdm
-import pandas as pd
+import shutil
 import torch
 from torch import nn
 from torch.utils.data import DataLoader
@@ -104,7 +103,10 @@ class MyTest:
                 )
 
         logger.info("save metrics")
-        tensorboard_writer = SummaryWriter(self.model_path / "log" / "test")
+        shutil.rmtree(self.model_path / "log" / "test" / self.target)
+        tensorboard_writer = SummaryWriter(
+            self.model_path / "log" / "test" / self.target
+        )
         for metric_name, metric_fun in metrics.items():
             tensorboard_writer.add_scalar(
                 f"test/{metric_name}", metric_fun.epoch(), cfg.train.last_epoch
