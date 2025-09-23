@@ -254,7 +254,8 @@ class MyTrain:
         my_early_stopping = MyEarlyStopping(**cfg.early_stopping.as_dict())
 
         logger.info("open tensorboard writer")
-        shutil.rmtree(model_path / "log" / "train")
+        if os.path.exists(model_path / "log" / "train"):
+            shutil.rmtree(model_path / "log" / "train")
         tensorboard_writer = SummaryWriter(model_path / "log" / "train")
 
         logger.info("train loop")
@@ -361,7 +362,8 @@ class MyTrain:
         logger: logging.Logger,
     ) -> None:
         logger.info("open tensorboard writer")
-        shutil.rmtree(model_path / "log" / "eval")
+        if os.path.exists(model_path / "log" / "eval"):
+            shutil.rmtree(model_path / "log" / "eval")
         tensorboard_writer = SummaryWriter(model_path / "log" / "eval")
 
         logger.info("eval loop")

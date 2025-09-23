@@ -103,7 +103,8 @@ class MyTest:
                 )
 
         logger.info("save metrics")
-        shutil.rmtree(self.model_path / "log" / "test" / self.target)
+        if os.path.exists(self.model_path / "log" / "test" / self.target):
+            shutil.rmtree(self.model_path / "log" / "test" / self.target)
         tensorboard_writer = SummaryWriter(
             self.model_path / "log" / "test" / self.target
         )
