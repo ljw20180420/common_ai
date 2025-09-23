@@ -22,8 +22,8 @@ flowchart TD
         CHECKCONSISTENCY[check config consistency] --> EVALLOADCHECKPOINT[load checkpoint for model and generator] --> EVALDEVICE[set model device] --> EVALDATALOADER[setup data loader] --> EVALEPOCHBRANCH{{implement <code>model.my_eval_epoch</code>?}}
         EVALEPOCHBRANCH -- yes --> CUSTOMEVAL[<code>model.my_eval_epoch</code>]
         EVALEPOCHBRANCH -- no --> COMMONEVAL[<code>MyTrain.my_eval_epoch</code>]
-        CUSTOMEVAL --> UPDATECONFIGPERFORM[update configuration and performance]
-        COMMONEVAL --> UPDATECONFIGPERFORM[update configuration and performance]
+        CUSTOMEVAL --> UPDATECONFIGPERFORM[update configuration]
+        COMMONEVAL --> UPDATECONFIGPERFORM
     end
 
     MODE -- no --> COMMONTRAIN[<code>MyTrain.my_train_model</code>]
@@ -50,7 +50,7 @@ flowchart TD
         P -- no --> R[<code>MyTrain.my_eval_epoch</code>]
         Q --> UPDATELR[update learning rate]
         R --> UPDATELR
-        UPDATELR --> TRAINSAVE[save epoch configuration, performance and checkpoint] --> EARLYSTOP[check early stopping]
+        UPDATELR --> TRAINSAVE[save epoch configuration and checkpoint] --> EARLYSTOP[check early stopping]
     end
 ```
 

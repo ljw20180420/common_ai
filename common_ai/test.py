@@ -6,6 +6,7 @@ import pandas as pd
 import torch
 from torch import nn
 from torch.utils.data import DataLoader
+from torch.utils.tensorboard import SummaryWriter
 from typing import Literal
 import importlib
 import jsonargparse
@@ -103,13 +104,11 @@ class MyTest:
                     examples=examples,
                     batch=batch,
                 )
-        metric_loss_dict = {"name": [], "loss": []}
-        for metric_name, metric_fun in metrics.items():
-            metric_loss_dict["name"].append(metric_name)
-            metric_loss_dict["loss"].append(metric_fun.epoch())
 
         logger.info("save metrics")
-        pd.DataFrame(metric_loss_dict).to_csv(
-            self.model_path / f"{self.target}_test_result.csv",
-            index=False,
-        )
+        tensorboard_writer = SummaryWriter(self.model_path / "log")
+        for metric_name, metric_fun in metrics.items():
+            tensorboard_writer.add_scalar(
+                f"test_{metric_name}", metric_fun.epoch(), cfg.train.last_epoch
+            )
+        tensorboard_writer.close()

@@ -1,8 +1,10 @@
+import time
 import torch
 from torch import nn
 import os
 import pathlib
 from torch.utils.data import DataLoader
+from torch.utils.tensorboard import SummaryWriter
 import json
 from typing import Literal, Generator
 from numbers import Number
@@ -62,7 +64,7 @@ class MyTrain:
         train_parser: jsonargparse.ArgumentParser,
         cfg: jsonargparse.Namespace,
         dataset: datasets.Dataset,
-    ) -> Generator:
+    ) -> None:
         logger = get_logger(**cfg.logger.as_dict())
         logger.info("instantiate model and random generator")
         model, model_path = instantiate_model(cfg)
@@ -77,7 +79,7 @@ class MyTrain:
             )(**metric.init_args.as_dict())
 
         if not self.evaluation_only:
-            for performance in self.my_train_model(
+            self.my_train_model(
                 train_parser,
                 cfg,
                 dataset,
@@ -86,10 +88,9 @@ class MyTrain:
                 my_generator,
                 metrics,
                 logger,
-            ):
-                yield performance
+            )
         else:
-            for performance in self.my_eval_model(
+            self.my_eval_model(
                 train_parser,
                 cfg,
                 dataset,
@@ -98,8 +99,7 @@ class MyTrain:
                 my_generator,
                 metrics,
                 logger,
-            ):
-                yield performance
+            )
 
     def my_train_epoch(
         self,
@@ -146,7 +146,7 @@ class MyTrain:
         eval_dataloader: torch.utils.data.DataLoader,
         my_generator: MyGenerator,
         metrics: dict,
-    ):
+    ) -> tuple[float | dict]:
         with torch.no_grad():
             if isinstance(model, nn.Module):
                 model.eval()
@@ -195,7 +195,7 @@ class MyTrain:
         my_generator: MyGenerator,
         metrics: dict,
         logger: logging.Logger,
-    ) -> Generator:
+    ) -> None:
         if self.last_epoch >= 0:
             logger.info("load checkpoint for model and random generator")
             model_path = pathlib.Path(os.fspath(model_path))
@@ -253,8 +253,13 @@ class MyTrain:
         logger.info("instantiate early stopping")
         my_early_stopping = MyEarlyStopping(**cfg.early_stopping.as_dict())
 
+        logger.info("open tensorboard writer")
+        tensorboard_writer = SummaryWriter(model_path / "log")
+
         logger.info("train loop")
         for epoch in tqdm(range(self.last_epoch + 1, self.num_epochs)):
+            epoch_start_time = time.time()
+
             logger.info(f"train epoch {epoch}")
             if hasattr(model, "my_train_epoch"):
                 train_loss, train_loss_num, grad_norm = model.my_train_epoch(
@@ -268,7 +273,13 @@ class MyTrain:
                 train_loss, train_loss_num, grad_norm = self.my_train_epoch(
                     model, train_dataloader, my_generator, my_optimizer
                 )
-            print({"train_loss": train_loss / train_loss_num})
+
+            tensorboard_writer.add_scalar("train_loss", train_loss, epoch)
+            tensorboard_writer.add_scalar("train_loss_num", train_loss_num, epoch)
+            tensorboard_writer.add_scalar(
+                "mean_train_loss", train_loss / train_loss_num, epoch
+            )
+            tensorboard_writer.add_scalar("grad_norm", grad_norm, epoch)
 
             logger.info(f"eval epoch {epoch}")
             if hasattr(model, "my_eval_epoch"):
@@ -279,9 +290,19 @@ class MyTrain:
                 eval_loss, eval_loss_num, metric_loss_dict = self.my_eval_epoch(
                     model, eval_dataloader, my_generator, metrics
                 )
-            print({"eval_loss": eval_loss / eval_loss_num})
+
+            tensorboard_writer.add_scalar("eval_loss", eval_loss, epoch)
+            tensorboard_writer.add_scalar("eval_loss_num", eval_loss_num, epoch)
+            tensorboard_writer.add_scalar(
+                "mean_eval_loss", eval_loss / eval_loss_num, epoch
+            )
+            for metric_name, metric_val in metric_loss_dict.items():
+                tensorboard_writer.add_scalar(f"eval_{metric_name}", metric_val, epoch)
 
             if isinstance(model, nn.Module):
+                tensorboard_writer.add_scalar(
+                    "learning rate", my_lr_scheduler.get_last_lr()[0], epoch
+                )
                 logger.info(f"update learning rate for {epoch}")
                 my_lr_scheduler.step(eval_loss / eval_loss_num)
 
@@ -296,24 +317,6 @@ class MyTrain:
                 path=model_path / "checkpoints" / f"checkpoint-{epoch}" / "train.yaml",
                 overwrite=True,
             )
-
-            performance = {
-                "train": {
-                    "loss": train_loss,
-                    "loss_num": train_loss_num,
-                    "grad_num": grad_norm,
-                },
-                "eval": {
-                    "loss": eval_loss,
-                    "loss_num": eval_loss_num,
-                    **metric_loss_dict,
-                },
-            }
-            with open(
-                model_path / "checkpoints" / f"checkpoint-{epoch}" / "performance.json",
-                "w",
-            ) as fd:
-                json.dump(performance, fd, indent=4)
 
             obj = {
                 "model": model.state_dict(),
@@ -332,11 +335,18 @@ class MyTrain:
                 f=model_path / "checkpoints" / f"checkpoint-{epoch}" / "checkpoint.pt",
             )
 
-            yield performance
+            tensorboard_writer.add_scalar(
+                "epoch_time", time.time() - epoch_start_time, epoch
+            )
+            logger.info(f"flush tensorboard log for epoch {epoch}")
+            tensorboard_writer.flush()
 
             if my_early_stopping(eval_loss / eval_loss_num):
                 logger.info(f"Early stop at epoch {epoch}")
                 break
+
+        logger.info("close tensorboard_writer")
+        tensorboard_writer.close()
 
     def my_eval_model(
         self,
@@ -348,7 +358,10 @@ class MyTrain:
         my_generator: MyGenerator,
         metrics: dict,
         logger: logging.Logger,
-    ) -> Generator:
+    ) -> None:
+        logger.info("open tensorboard writer")
+        tensorboard_writer = SummaryWriter(model_path / "log")
+
         logger.info("eval loop")
         for epoch in tqdm(range(self.last_epoch + 1, self.num_epochs)):
             logger.info("check config consistency")
@@ -398,9 +411,16 @@ class MyTrain:
                 eval_loss, eval_loss_num, metric_loss_dict = self.my_eval_epoch(
                     model, eval_dataloader, my_generator, metrics
                 )
-            print({"eval_loss": eval_loss / eval_loss_num})
 
-            logger.info(f"update config and evaluation for epoch {epoch}")
+            tensorboard_writer.add_scalar("eval_loss", eval_loss, epoch)
+            tensorboard_writer.add_scalar("eval_loss_num", eval_loss_num, epoch)
+            tensorboard_writer.add_scalar(
+                "mean_eval_loss", eval_loss / eval_loss_num, epoch
+            )
+            for metric_name, metric_val in metric_loss_dict.items():
+                tensorboard_writer.add_scalar(f"eval_{metric_name}", metric_val, epoch)
+
+            logger.info(f"update config for epoch {epoch}")
             cfg.train.last_epoch = epoch
             train_parser.save(
                 cfg=cfg,
@@ -408,21 +428,5 @@ class MyTrain:
                 overwrite=True,
             )
 
-            with open(
-                model_path / "checkpoints" / f"checkpoint-{epoch}" / "performance.json",
-                "r",
-            ) as fd:
-                performance = json.load(fd)
-
-            performance["eval"] = {
-                "loss": eval_loss,
-                "loss_num": eval_loss_num,
-                **metric_loss_dict,
-            }
-            with open(
-                model_path / "checkpoints" / f"checkpoint-{epoch}" / "performance.json",
-                "w",
-            ) as fd:
-                json.dump(performance, fd, indent=4)
-
-            yield performance
+            logger.info(f"flush tensorboard log for epoch {epoch}")
+            tensorboard_writer.flush()

@@ -93,3 +93,6 @@ class MyLrScheduler:
             self.lr_scheduler.step(loss)
         else:
             self.lr_scheduler.step()
+
+    def get_last_lr(self) -> list[float]:
+        return self.lr_scheduler.get_last_lr()
