@@ -55,15 +55,8 @@ class MyTest:
         dataset: datasets.Dataset,
     ) -> None:
         logger = get_logger(**cfg.logger.as_dict())
-        logger.info("instantiate model")
+        logger.info("instantiate model and random generator")
         model, _ = instantiate_model(cfg)
-
-        setattr(model, "device", self.device)
-        if isinstance(model, nn.Module):
-            model = model.to(self.device)
-            model.eval()
-
-        logger.info("instantiate components")
         my_generator = MyGenerator(**cfg.generator.as_dict())
 
         logger.info("instantiate metrics")
@@ -74,7 +67,7 @@ class MyTest:
                 importlib.import_module(metric_module), metric_cls
             )(**metric.init_args.as_dict())
 
-        logger.info("load checkpoint")
+        logger.info("load checkpoint for model and random generator")
         checkpoint = torch.load(
             self.model_path
             / "checkpoints"
@@ -85,15 +78,21 @@ class MyTest:
         model.load_state_dict(checkpoint["model"])
         my_generator.load_state_dict(checkpoint["generator"])
 
-        logger.info("load dataset")
-        dl = DataLoader(
+        logger.info("set model device")
+        setattr(model, "device", self.device)
+        if isinstance(model, nn.Module):
+            model = model.to(self.device)
+            model.eval()
+
+        logger.info("setup data loader")
+        test_dataloader = DataLoader(
             dataset=dataset["test"],
             batch_size=self.batch_size,
             collate_fn=lambda examples: examples,
         )
 
         logger.info("test model")
-        for examples in tqdm(dl):
+        for examples in tqdm(test_dataloader):
             batch = model.data_collator(
                 examples, output_label=True, my_generator=my_generator
             )
@@ -109,7 +108,7 @@ class MyTest:
             metric_loss_dict["name"].append(metric_name)
             metric_loss_dict["loss"].append(metric_fun.epoch())
 
-        logger.info("output metrics")
+        logger.info("save metrics")
         pd.DataFrame(metric_loss_dict).to_csv(
             self.model_path / f"{self.target}_test_result.csv",
             index=False,

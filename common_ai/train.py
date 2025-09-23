@@ -64,17 +64,40 @@ class MyTrain:
         dataset: datasets.Dataset,
     ) -> Generator:
         logger = get_logger(**cfg.logger.as_dict())
-        logger.info("instantiate model")
+        logger.info("instantiate model and random generator")
         model, model_path = instantiate_model(cfg)
+        my_generator = MyGenerator(**cfg.generator.as_dict())
+
+        logger.info("instantiate metrics")
+        metrics = {}
+        for metric in cfg.metric:
+            metric_module, metric_cls = metric.class_path.rsplit(".", 1)
+            metrics[metric_cls] = getattr(
+                importlib.import_module(metric_module), metric_cls
+            )(**metric.init_args.as_dict())
 
         if not self.evaluation_only:
             for performance in self.my_train_model(
-                train_parser, cfg, dataset, model, model_path, logger
+                train_parser,
+                cfg,
+                dataset,
+                model,
+                model_path,
+                my_generator,
+                metrics,
+                logger,
             ):
                 yield performance
         else:
             for performance in self.my_eval_model(
-                train_parser, cfg, dataset, model, model_path, logger
+                train_parser,
+                cfg,
+                dataset,
+                model,
+                model_path,
+                my_generator,
+                metrics,
+                logger,
             ):
                 yield performance
 
@@ -169,31 +192,12 @@ class MyTrain:
         dataset: datasets.Dataset,
         model: object,
         model_path: os.PathLike,
+        my_generator: MyGenerator,
+        metrics: dict,
         logger: logging.Logger,
     ) -> Generator:
-        # Move model to the device as soon as possible so that get_optimizer (for Adagrad) can work correctly.
-        setattr(model, "device", self.device)
-        if isinstance(model, nn.Module):
-            model = model.to(self.device)
-
-        logger.info("instantiate components")
-        my_generator = MyGenerator(**cfg.generator.as_dict())
-        my_optimizer = MyOptimizer(**cfg.optimizer.as_dict())
-        my_lr_scheduler = MyLrScheduler(**cfg.lr_scheduler.as_dict())
-        if isinstance(model, nn.Module):
-            my_optimizer(model)
-            my_lr_scheduler(my_optimizer)
-
-        logger.info("instantiate metrics")
-        metrics = {}
-        for metric in cfg.metric:
-            metric_module, metric_cls = metric.class_path.rsplit(".", 1)
-            metrics[metric_cls] = getattr(
-                importlib.import_module(metric_module), metric_cls
-            )(**metric.init_args.as_dict())
-
         if self.last_epoch >= 0:
-            logger.info("load checkpoint")
+            logger.info("load checkpoint for model and random generator")
             model_path = pathlib.Path(os.fspath(model_path))
             checkpoint = torch.load(
                 model_path
@@ -204,9 +208,6 @@ class MyTrain:
             )
             model.load_state_dict(checkpoint["model"])
             my_generator.load_state_dict(checkpoint["generator"])
-            if isinstance(model, nn.Module):
-                my_optimizer.load_state_dict(checkpoint["optimizer"])
-                my_lr_scheduler.load_state_dict(checkpoint["lr_scheduler"])
         else:
             logger.info("initialize model weights")
             my_initializer = MyInitializer(**cfg.initializer.as_dict())
@@ -215,6 +216,27 @@ class MyTrain:
             else:
                 my_initializer(model, my_generator)
 
+        # Move model to the device before setup optimizer because some optimizers like Adagrad use device information.
+        logger.info("set model device")
+        setattr(model, "device", self.device)
+        if isinstance(model, nn.Module):
+            model = model.to(self.device)
+
+        logger.info("instantiate optimizer and lr scheduler")
+        my_optimizer = MyOptimizer(**cfg.optimizer.as_dict())
+        my_lr_scheduler = MyLrScheduler(**cfg.lr_scheduler.as_dict())
+
+        if isinstance(model, nn.Module):
+            if self.last_epoch >= 0:
+                logger.info("load checkpoint for optimizer and lr scheduler")
+                my_optimizer.load_state_dict(checkpoint["optimizer"])
+                my_lr_scheduler.load_state_dict(checkpoint["lr_scheduler"])
+
+            logger.info("setup optimizer and lr_scheduler")
+            my_optimizer(model)
+            my_lr_scheduler(my_optimizer)
+
+        logger.info("setup data loader")
         train_dataloader = torch.utils.data.DataLoader(
             dataset=dataset["train"],
             batch_size=self.batch_size,
@@ -228,8 +250,10 @@ class MyTrain:
             collate_fn=lambda examples: examples,
         )
 
-        logger.info("train loop")
+        logger.info("instantiate early stopping")
         my_early_stopping = MyEarlyStopping(**cfg.early_stopping.as_dict())
+
+        logger.info("train loop")
         for epoch in tqdm(range(self.last_epoch + 1, self.num_epochs)):
             logger.info(f"train epoch {epoch}")
             if hasattr(model, "my_train_epoch"):
@@ -257,8 +281,8 @@ class MyTrain:
                 )
             print({"eval_loss": eval_loss / eval_loss_num})
 
-            logger.info(f"update learning rate for {epoch}")
             if isinstance(model, nn.Module):
+                logger.info(f"update learning rate for {epoch}")
                 my_lr_scheduler.step(eval_loss / eval_loss_num)
 
             logger.info(f"save epoch {epoch}")
@@ -321,23 +345,10 @@ class MyTrain:
         dataset: datasets.Dataset,
         model: object,
         model_path: os.PathLike,
+        my_generator: MyGenerator,
+        metrics: dict,
         logger: logging.Logger,
     ) -> Generator:
-        setattr(model, "device", self.device)
-        if isinstance(model, nn.Module):
-            model = model.to(self.device)
-
-        logger.info("instantiate components")
-        my_generator = MyGenerator(**cfg.generator.as_dict())
-
-        logger.info("instantiate metrics")
-        metrics = {}
-        for metric in cfg.metric:
-            metric_module, metric_cls = metric.class_path.rsplit(".", 1)
-            metrics[metric_cls] = getattr(
-                importlib.import_module(metric_module), metric_cls
-            )(**metric.init_args.as_dict())
-
         logger.info("eval loop")
         for epoch in tqdm(range(self.last_epoch + 1, self.num_epochs)):
             logger.info("check config consistency")
@@ -357,7 +368,7 @@ class MyTrain:
                     cfg[key] == cfg_train[key]
                 ), f"train and evaluation configuration of {key} is not consistent"
 
-            logger.info("load checkpoint")
+            logger.info("load checkpoint for model and random generator")
             model_path = pathlib.Path(os.fspath(model_path))
             checkpoint = torch.load(
                 model_path / "checkpoints" / f"checkpoint-{epoch}" / "checkpoint.pt",
@@ -366,7 +377,12 @@ class MyTrain:
             model.load_state_dict(checkpoint["model"])
             my_generator.load_state_dict(checkpoint["generator"])
 
-            logger.info("set dataloader")
+            logger.info("set model device")
+            setattr(model, "device", self.device)
+            if isinstance(model, nn.Module):
+                model = model.to(self.device)
+
+            logger.info("setup data loader")
             eval_dataloader = DataLoader(
                 dataset=dataset["validation"],
                 batch_size=self.batch_size,

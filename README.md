@@ -11,15 +11,15 @@ The `MyTrain` class train subclass of huggingface `PreTrainedModel`. `model.stat
 title: MyTrain.__call__
 ---
 flowchart TD
-    INST[instantiate model] --> MODE{{evaluation only?}}
+    INST[instantiate model and random generator] --> TRAININSTMETRICS[instantiate metrics] --> MODE{{evaluation only?}}
     MODE -- yes --> EVALMODEL[<code>MyTrain.my_eval_model</code>]
 
     subgraph EVALMODEL[<code>MyTrain.my_eval_model</code>]
-        EVALINSTCOMPS[instantiate components] --> EVALINSTMETRICS[instantiate metrics] --> EVALLOOP[eval loop]
+        EVALLOOP[eval loop]
     end
 
     subgraph EVALLOOP[eval loop]
-        CHECKCONSISTENCY[check config consistency] --> EVALLOADCHECKPOINT[load checkpoint] --> EVALEPOCHBRANCH{{implement <code>model.my_eval_epoch</code>?}}
+        CHECKCONSISTENCY[check config consistency] --> EVALLOADCHECKPOINT[load checkpoint for model and generator] --> EVALDEVICE[set model device] --> EVALDATALOADER[setup data loader] --> EVALEPOCHBRANCH{{implement <code>model.my_eval_epoch</code>?}}
         EVALEPOCHBRANCH -- yes --> CUSTOMEVAL[<code>model.my_eval_epoch</code>]
         EVALEPOCHBRANCH -- no --> COMMONEVAL[<code>MyTrain.my_eval_epoch</code>]
         CUSTOMEVAL --> UPDATECONFIGPERFORM[update configuration and performance]
@@ -29,13 +29,16 @@ flowchart TD
     MODE -- no --> COMMONTRAIN[<code>MyTrain.my_train_model</code>]
 
     subgraph COMMONTRAIN[<code>MyTrain.my_train_model</code>]
-        TRAININSTCOMPS[instantiate components] --> TRAININSTMETRICS[instantiate metrics] --> CONTINUETRAIN{{last epoch is -1?}}
-        CONTINUETRAIN -- yes --> HASINIT{{implement <code>model.my_initialize_model</code>?}} -- yes --> CUSTOMINIT{{<code>model.my_initialize_model</code>?}}
+        CONTINUETRAIN{{last epoch is -1?}}
+        CONTINUETRAIN -- yes --> HASINIT{{implement <code>model.my_initialize_model</code>?}} -- yes --> CUSTOMINIT[<code>model.my_initialize_model</code>?]
         HASINIT -- no --> INITWEIGHT[initialize model weights by <code>my_initializer</code>]
-        CONTINUETRAIN -- no --> TRAINLOADCHECK[load checkpoint]
-        CUSTOMINIT --> TRAINLOOP[train loop]
-        INITWEIGHT --> TRAINLOOP
-        TRAINLOADCHECK --> TRAINLOOP
+        CONTINUETRAIN -- no --> TRAINLOADCHECK[load checkpoint for model and random generator]
+        CUSTOMINIT --> TRAINDEVICE[set model device]
+        INITWEIGHT --> TRAINDEVICE
+        TRAINLOADCHECK --> TRAINDEVICE
+        TRAINDEVICE --> INSTOPSC[instantiate optimizer and lr scheduler] --> CONTINUETRAIN2{{last epoch is -1?}} -- no --> TRAINCHECKOPSC[load checkpoint for optimizer and lr scheduler] --> SETUPOPSC[setup optimizer and lr_scheduler]
+        CONTINUETRAIN2{{last epoch is -1?}} -- yes --> SETUPOPSC
+        SETUPOPSC --> TRAINDATALOADER[setup data loader] --> INSTEARLYSTOP[instantiate early stopping] --> TRAINLOOP[train loop]
     end
     subgraph TRAINLOOP[train loop]
         M{{implement <code>model.my_train_epoch</code>?}}
@@ -47,7 +50,7 @@ flowchart TD
         P -- no --> R[<code>MyTrain.my_eval_epoch</code>]
         Q --> UPDATELR[update learning rate]
         R --> UPDATELR
-        UPDATELR --> S[save current epoch and configuration] --> T[save performance] --> U[save checkpoint] --> EARLYSTOP[check early stopping]
+        UPDATELR --> TRAINSAVE[save epoch configuration, performance and checkpoint] --> EARLYSTOP[check early stopping]
     end
 ```
 
@@ -60,7 +63,7 @@ The `MyTest` class test subclass of huggingface `PreTrainedModel`. `MyTest` will
 title: MyTest.__call__
 ---
 flowchart TD
-    INSTMODEL[instantiate model] --> INSTCOMP[instantiate components] --> INSTMETRIC[instantiate metrics] --> LOADCHECK[load checkpoint] --> F[calculate test metrics] --> G[save test metrics]
+    INSTMODEL[instantiate model and random generator] --> INSTMETRIC[instantiate metrics] --> LOADCHECK[load checkpoint for model and random generator] --> TESTDEVICE[set model device] --> TESTDATA[setup data loader] --> TESTMODEL[test model] --> TESTSAVE[save metrics]
 ```
 
 # Metric
