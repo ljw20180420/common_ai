@@ -109,6 +109,6 @@ class MyTest:
         tensorboard_writer = SummaryWriter(self.model_path / "log")
         for metric_name, metric_fun in metrics.items():
             tensorboard_writer.add_scalar(
-                f"test_{metric_name}", metric_fun.epoch(), cfg.train.last_epoch
+                f"test/{metric_name}", metric_fun.epoch(), cfg.train.last_epoch
             )
         tensorboard_writer.close()

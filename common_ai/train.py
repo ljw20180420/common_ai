@@ -274,12 +274,12 @@ class MyTrain:
                     model, train_dataloader, my_generator, my_optimizer
                 )
 
-            tensorboard_writer.add_scalar("train_loss", train_loss, epoch)
-            tensorboard_writer.add_scalar("train_loss_num", train_loss_num, epoch)
+            tensorboard_writer.add_scalar("train/loss", train_loss, epoch)
+            tensorboard_writer.add_scalar("train/loss_num", train_loss_num, epoch)
             tensorboard_writer.add_scalar(
-                "mean_train_loss", train_loss / train_loss_num, epoch
+                "train/mean_loss", train_loss / train_loss_num, epoch
             )
-            tensorboard_writer.add_scalar("grad_norm", grad_norm, epoch)
+            tensorboard_writer.add_scalar("train/grad_norm", grad_norm, epoch)
 
             logger.info(f"eval epoch {epoch}")
             if hasattr(model, "my_eval_epoch"):
@@ -291,13 +291,13 @@ class MyTrain:
                     model, eval_dataloader, my_generator, metrics
                 )
 
-            tensorboard_writer.add_scalar("eval_loss", eval_loss, epoch)
-            tensorboard_writer.add_scalar("eval_loss_num", eval_loss_num, epoch)
+            tensorboard_writer.add_scalar("eval/loss", eval_loss, epoch)
+            tensorboard_writer.add_scalar("eval/loss_num", eval_loss_num, epoch)
             tensorboard_writer.add_scalar(
-                "mean_eval_loss", eval_loss / eval_loss_num, epoch
+                "eval/mean_loss", eval_loss / eval_loss_num, epoch
             )
             for metric_name, metric_val in metric_loss_dict.items():
-                tensorboard_writer.add_scalar(f"eval_{metric_name}", metric_val, epoch)
+                tensorboard_writer.add_scalar(f"eval/{metric_name}", metric_val, epoch)
 
             if isinstance(model, nn.Module):
                 tensorboard_writer.add_scalar(
@@ -412,13 +412,13 @@ class MyTrain:
                     model, eval_dataloader, my_generator, metrics
                 )
 
-            tensorboard_writer.add_scalar("eval_loss", eval_loss, epoch)
-            tensorboard_writer.add_scalar("eval_loss_num", eval_loss_num, epoch)
+            tensorboard_writer.add_scalar("eval/loss", eval_loss, epoch)
+            tensorboard_writer.add_scalar("eval/loss_num", eval_loss_num, epoch)
             tensorboard_writer.add_scalar(
-                "mean_eval_loss", eval_loss / eval_loss_num, epoch
+                "eval/mean_loss", eval_loss / eval_loss_num, epoch
             )
             for metric_name, metric_val in metric_loss_dict.items():
-                tensorboard_writer.add_scalar(f"eval_{metric_name}", metric_val, epoch)
+                tensorboard_writer.add_scalar(f"eval/{metric_name}", metric_val, epoch)
 
             logger.info(f"update config for epoch {epoch}")
             cfg.train.last_epoch = epoch
