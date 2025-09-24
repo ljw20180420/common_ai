@@ -198,9 +198,10 @@ class MyTrain:
         metrics: dict,
         logger: logging.Logger,
     ) -> Generator:
+        model_path = pathlib.Path(os.fspath(model_path))
+
         if self.last_epoch >= 0:
             logger.info("load checkpoint for model and random generator")
-            model_path = pathlib.Path(os.fspath(model_path))
             checkpoint = torch.load(
                 model_path
                 / "checkpoints"
@@ -256,9 +257,11 @@ class MyTrain:
         my_early_stopping = MyEarlyStopping(**cfg.early_stopping.as_dict())
 
         logger.info("open tensorboard writer")
-        if os.path.exists(model_path / "log" / "train"):
-            shutil.rmtree(model_path / "log" / "train")
-        tensorboard_writer = SummaryWriter(model_path / "log" / "train")
+        logdir = model_path / "log" / "train"
+        if os.path.exists(logdir):
+            logger.warning(f"{logdir.as_posix()} already exits, delete it.")
+            shutil.rmtree(logdir)
+        tensorboard_writer = SummaryWriter(logdir)
 
         logger.info("train loop")
         for epoch in tqdm(range(self.last_epoch + 1, self.num_epochs)):
@@ -345,7 +348,7 @@ class MyTrain:
             logger.info(f"flush tensorboard log for epoch {epoch}")
             tensorboard_writer.flush()
 
-            yield epoch, model_path / "log" / "train"
+            yield epoch, logdir
 
             if my_early_stopping(eval_loss / eval_loss_num):
                 logger.info(f"Early stop at epoch {epoch}")
@@ -365,10 +368,14 @@ class MyTrain:
         metrics: dict,
         logger: logging.Logger,
     ) -> Generator:
+        model_path = pathlib.Path(os.fspath(model_path))
+
         logger.info("open tensorboard writer")
-        if os.path.exists(model_path / "log" / "eval"):
-            shutil.rmtree(model_path / "log" / "eval")
-        tensorboard_writer = SummaryWriter(model_path / "log" / "eval")
+        logdir = model_path / "log" / "eval"
+        if os.path.exists(logdir):
+            logger.warning(f"{logdir.as_posix()} already exits, delete it.")
+            shutil.rmtree(logdir)
+        tensorboard_writer = SummaryWriter(logdir)
 
         logger.info("eval loop")
         for epoch in tqdm(range(self.last_epoch + 1, self.num_epochs)):
@@ -439,4 +446,4 @@ class MyTrain:
             logger.info(f"flush tensorboard log for epoch {epoch}")
             tensorboard_writer.flush()
 
-            yield epoch, model_path / "log" / "eval"
+            yield epoch, logdir
