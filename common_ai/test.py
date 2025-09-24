@@ -103,15 +103,15 @@ class MyTest:
                 )
 
         logger.info("save metrics")
-        if os.path.exists(self.model_path / "log" / "test" / self.target):
-            shutil.rmtree(self.model_path / "log" / "test" / self.target)
-        tensorboard_writer = SummaryWriter(
-            self.model_path / "log" / "test" / self.target
-        )
+        logdir = self.model_path / "log" / "test" / self.target
+        if os.path.exists(logdir):
+            logger.warning(f"{logdir.as_posix()} already exits, delete it.")
+            shutil.rmtree(logdir)
+        tensorboard_writer = SummaryWriter(logdir)
         for metric_name, metric_fun in metrics.items():
             tensorboard_writer.add_scalar(
                 f"test/{metric_name}", metric_fun.epoch(), cfg.train.last_epoch
             )
         tensorboard_writer.close()
 
-        return cfg.train.last_epoch, self.model_path / "log" / "test" / self.target
+        return cfg.train.last_epoch, logdir
