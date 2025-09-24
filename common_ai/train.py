@@ -79,7 +79,7 @@ class MyTrain:
             )(**metric.init_args.as_dict())
 
         if not self.evaluation_only:
-            for epoch in self.my_train_model(
+            for epoch, logdir in self.my_train_model(
                 train_parser,
                 cfg,
                 dataset,
@@ -89,9 +89,9 @@ class MyTrain:
                 metrics,
                 logger,
             ):
-                yield epoch
+                yield epoch, logdir
         else:
-            for epoch in self.my_eval_model(
+            for epoch, logdir in self.my_eval_model(
                 train_parser,
                 cfg,
                 dataset,
@@ -101,7 +101,7 @@ class MyTrain:
                 metrics,
                 logger,
             ):
-                yield epoch
+                yield epoch, logdir
 
     def my_train_epoch(
         self,
@@ -345,7 +345,7 @@ class MyTrain:
             logger.info(f"flush tensorboard log for epoch {epoch}")
             tensorboard_writer.flush()
 
-            yield epoch
+            yield epoch, model_path / "log" / "train"
 
             if my_early_stopping(eval_loss / eval_loss_num):
                 logger.info(f"Early stop at epoch {epoch}")
@@ -439,4 +439,4 @@ class MyTrain:
             logger.info(f"flush tensorboard log for epoch {epoch}")
             tensorboard_writer.flush()
 
-            yield epoch
+            yield epoch, model_path / "log" / "eval"
