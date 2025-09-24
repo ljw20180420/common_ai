@@ -51,7 +51,7 @@ class MyTest:
         self,
         cfg: jsonargparse.Namespace,
         dataset: datasets.Dataset,
-    ) -> pathlib.Path:
+    ) -> tuple[int, pathlib.Path]:
         logger = get_logger(**cfg.logger.as_dict())
         logger.info("instantiate model and random generator")
         model, _ = instantiate_model(cfg)
@@ -114,4 +114,4 @@ class MyTest:
             )
         tensorboard_writer.close()
 
-        return self.model_path / "log" / "test" / self.target
+        return cfg.train.last_epoch, self.model_path / "log" / "test" / self.target
