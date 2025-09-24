@@ -6,7 +6,7 @@ import pathlib
 from torch.utils.data import DataLoader
 from torch.utils.tensorboard import SummaryWriter
 import shutil
-from typing import Literal
+from typing import Literal, Generator
 from numbers import Number
 import importlib
 from tqdm import tqdm
@@ -195,7 +195,7 @@ class MyTrain:
         my_generator: MyGenerator,
         metrics: dict,
         logger: logging.Logger,
-    ) -> None:
+    ) -> Generator:
         if self.last_epoch >= 0:
             logger.info("load checkpoint for model and random generator")
             model_path = pathlib.Path(os.fspath(model_path))
@@ -343,6 +343,8 @@ class MyTrain:
             logger.info(f"flush tensorboard log for epoch {epoch}")
             tensorboard_writer.flush()
 
+            yield
+
             if my_early_stopping(eval_loss / eval_loss_num):
                 logger.info(f"Early stop at epoch {epoch}")
                 break
@@ -360,7 +362,7 @@ class MyTrain:
         my_generator: MyGenerator,
         metrics: dict,
         logger: logging.Logger,
-    ) -> None:
+    ) -> Generator:
         logger.info("open tensorboard writer")
         if os.path.exists(model_path / "log" / "eval"):
             shutil.rmtree(model_path / "log" / "eval")
@@ -434,3 +436,5 @@ class MyTrain:
 
             logger.info(f"flush tensorboard log for epoch {epoch}")
             tensorboard_writer.flush()
+
+            yield
