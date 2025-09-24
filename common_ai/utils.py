@@ -55,15 +55,18 @@ def target_to_epoch(model_path: os.PathLike, target: str) -> int:
     latest_event_file_train, latest_time_train = get_latest_event_file(
         model_path / "log" / "train"
     )
-    latest_event_file_eval, latest_time_eval = get_latest_event_file(
-        model_path / "log" / "eval"
-    )
-
     df_train = SummaryReader(latest_event_file_train.as_posix(), pivot=True).scalars
-    if latest_time_eval > latest_time_train:
-        df_eval = SummaryReader(latest_event_file_eval.as_posix(), pivot=True).scalars
-        for column in df_eval.columns:
-            df_train[column] = df_eval[column]
+
+    if os.path.exists(model_path / "log" / "eval"):
+        latest_event_file_eval, latest_time_eval = get_latest_event_file(
+            model_path / "log" / "eval"
+        )
+        if latest_time_eval > latest_time_train:
+            df_eval = SummaryReader(
+                latest_event_file_eval.as_posix(), pivot=True
+            ).scalars
+            for column in df_eval.columns:
+                df_train[column] = df_eval[column]
 
     epoch = df_train["step"].iloc[df_train[f"eval/{target}"].argmin()].item()
 
