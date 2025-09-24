@@ -64,7 +64,7 @@ class MyTrain:
         train_parser: jsonargparse.ArgumentParser,
         cfg: jsonargparse.Namespace,
         dataset: datasets.Dataset,
-    ) -> None:
+    ) -> Generator:
         logger = get_logger(**cfg.logger.as_dict())
         logger.info("instantiate model and random generator")
         model, model_path = instantiate_model(cfg)
@@ -79,7 +79,7 @@ class MyTrain:
             )(**metric.init_args.as_dict())
 
         if not self.evaluation_only:
-            self.my_train_model(
+            for _ in self.my_train_model(
                 train_parser,
                 cfg,
                 dataset,
@@ -88,9 +88,10 @@ class MyTrain:
                 my_generator,
                 metrics,
                 logger,
-            )
+            ):
+                yield
         else:
-            self.my_eval_model(
+            for _ in self.my_eval_model(
                 train_parser,
                 cfg,
                 dataset,
@@ -99,7 +100,8 @@ class MyTrain:
                 my_generator,
                 metrics,
                 logger,
-            )
+            ):
+                yield
 
     def my_train_epoch(
         self,
