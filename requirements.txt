@@ -1,5 +1,5 @@
 transformers
-jsonargparse
+jsonargparse[all]
 opt_einsum
 einops
 tbparse
