@@ -67,7 +67,7 @@ class MyTrain:
     ) -> Generator:
         logger = get_logger(**cfg.logger.as_dict())
         logger.info("instantiate model and random generator")
-        model, model_path = instantiate_model(cfg)
+        model, checkpoints_path, logs_path = instantiate_model(cfg)
         my_generator = MyGenerator(**cfg.generator.as_dict())
 
         logger.info("instantiate metrics")
@@ -84,7 +84,8 @@ class MyTrain:
                 cfg,
                 dataset,
                 model,
-                model_path,
+                checkpoints_path,
+                logs_path,
                 my_generator,
                 metrics,
                 logger,
@@ -96,7 +97,8 @@ class MyTrain:
                 cfg,
                 dataset,
                 model,
-                model_path,
+                checkpoints_path,
+                logs_path,
                 my_generator,
                 metrics,
                 logger,
@@ -193,20 +195,19 @@ class MyTrain:
         cfg: jsonargparse.Namespace,
         dataset: datasets.Dataset,
         model: object,
-        model_path: os.PathLike,
+        checkpoints_path: os.PathLike,
+        logs_path: os.PathLike,
         my_generator: MyGenerator,
         metrics: dict,
         logger: logging.Logger,
     ) -> Generator:
-        model_path = pathlib.Path(os.fspath(model_path))
+        checkpoints_path = pathlib.Path(os.fspath(checkpoints_path))
+        logs_path = pathlib.Path(os.fspath(logs_path))
 
         if self.last_epoch >= 0:
             logger.info("load checkpoint for model and random generator")
             checkpoint = torch.load(
-                model_path
-                / "checkpoints"
-                / f"checkpoint-{self.last_epoch}"
-                / "checkpoint.pt",
+                checkpoints_path / f"checkpoint-{self.last_epoch}" / "checkpoint.pt",
                 weights_only=False,
             )
             model.load_state_dict(checkpoint["model"])
@@ -257,7 +258,7 @@ class MyTrain:
         my_early_stopping = MyEarlyStopping(**cfg.early_stopping.as_dict())
 
         logger.info("open tensorboard writer")
-        logdir = model_path / "log" / "train"
+        logdir = logs_path / "train"
         if os.path.exists(logdir):
             logger.warning(f"{logdir.as_posix()} already exits, delete it.")
             shutil.rmtree(logdir)
@@ -314,14 +315,12 @@ class MyTrain:
                 my_lr_scheduler.step(eval_loss / eval_loss_num)
 
             logger.info(f"save epoch {epoch}")
-            os.makedirs(
-                model_path / "checkpoints" / f"checkpoint-{epoch}", exist_ok=True
-            )
+            os.makedirs(checkpoints_path / f"checkpoint-{epoch}", exist_ok=True)
 
             cfg.train.last_epoch = epoch
             train_parser.save(
                 cfg=cfg,
-                path=model_path / "checkpoints" / f"checkpoint-{epoch}" / "train.yaml",
+                path=checkpoints_path / f"checkpoint-{epoch}" / "train.yaml",
                 overwrite=True,
             )
 
@@ -339,7 +338,7 @@ class MyTrain:
 
             torch.save(
                 obj=obj,
-                f=model_path / "checkpoints" / f"checkpoint-{epoch}" / "checkpoint.pt",
+                f=checkpoints_path / f"checkpoint-{epoch}" / "checkpoint.pt",
             )
 
             tensorboard_writer.add_scalar(
@@ -363,15 +362,17 @@ class MyTrain:
         cfg: jsonargparse.Namespace,
         dataset: datasets.Dataset,
         model: object,
-        model_path: os.PathLike,
+        checkpoints_path: os.PathLike,
+        logs_path: os.PathLike,
         my_generator: MyGenerator,
         metrics: dict,
         logger: logging.Logger,
     ) -> Generator:
-        model_path = pathlib.Path(os.fspath(model_path))
+        checkpoints_path = pathlib.Path(os.fspath(checkpoints_path))
+        logs_path = pathlib.Path(os.fspath(logs_path))
 
         logger.info("open tensorboard writer")
-        logdir = model_path / "log" / "eval"
+        logdir = logs_path / "eval"
         if os.path.exists(logdir):
             logger.warning(f"{logdir.as_posix()} already exits, delete it.")
             shutil.rmtree(logdir)
@@ -381,7 +382,7 @@ class MyTrain:
         for epoch in tqdm(range(self.last_epoch + 1, self.num_epochs)):
             logger.info("check config consistency")
             cfg_train = train_parser.parse_path(
-                model_path / "checkpoints" / f"checkpoint-{epoch}" / "train.yaml"
+                checkpoints_path / f"checkpoint-{epoch}" / "train.yaml"
             )
             for key in cfg.keys():
                 if key in [
@@ -397,9 +398,8 @@ class MyTrain:
                 ), f"train and evaluation configuration of {key} is not consistent"
 
             logger.info("load checkpoint for model and random generator")
-            model_path = pathlib.Path(os.fspath(model_path))
             checkpoint = torch.load(
-                model_path / "checkpoints" / f"checkpoint-{epoch}" / "checkpoint.pt",
+                checkpoints_path / f"checkpoint-{epoch}" / "checkpoint.pt",
                 weights_only=False,
             )
             model.load_state_dict(checkpoint["model"])
@@ -439,7 +439,7 @@ class MyTrain:
             cfg.train.last_epoch = epoch
             train_parser.save(
                 cfg=cfg,
-                path=model_path / "checkpoints" / f"checkpoint-{epoch}" / "train.yaml",
+                path=checkpoints_path / f"checkpoint-{epoch}" / "train.yaml",
                 overwrite=True,
             )
 

@@ -18,7 +18,8 @@ from .generator import MyGenerator
 class MyTest:
     def __init__(
         self,
-        model_path: os.PathLike,
+        checkpoints_path: os.PathLike,
+        logs_path: os.PathLike,
         target: str,
         batch_size: int,
         device: Literal["cpu", "cuda"],
@@ -26,12 +27,14 @@ class MyTest:
         """Test arguments.
 
         Args:
-            model_path: Path to the model.
+            checkpoints_path: path to the model checkpoints.
+            logs_path: path to the model logs.
             target: target metric name.
             batch_size: Batch size.
-            device: Device.
+            device: device.
         """
-        self.model_path = pathlib.Path(os.fspath(model_path))
+        self.checkpoints_path = pathlib.Path(os.fspath(checkpoints_path))
+        self.logs_path = pathlib.Path(os.fspath(logs_path))
         self.target = target
         self.batch_size = batch_size
         self.device = device
@@ -40,9 +43,9 @@ class MyTest:
         self,
         train_parser: jsonargparse.ArgumentParser,
     ) -> jsonargparse.Namespace:
-        best_epoch = target_to_epoch(self.model_path, target=self.target)
+        best_epoch = target_to_epoch(self.logs_path, target=self.target)
         cfg = train_parser.parse_path(
-            self.model_path / "checkpoints" / f"checkpoint-{best_epoch}" / "train.yaml"
+            self.checkpoints_path / f"checkpoint-{best_epoch}" / "train.yaml"
         )
         return cfg
 
@@ -54,7 +57,7 @@ class MyTest:
     ) -> tuple[int, pathlib.Path]:
         logger = get_logger(**cfg.logger.as_dict())
         logger.info("instantiate model and random generator")
-        model, _ = instantiate_model(cfg)
+        model, _, _ = instantiate_model(cfg)
         my_generator = MyGenerator(**cfg.generator.as_dict())
 
         logger.info("instantiate metrics")
@@ -67,8 +70,7 @@ class MyTest:
 
         logger.info("load checkpoint for model and random generator")
         checkpoint = torch.load(
-            self.model_path
-            / "checkpoints"
+            self.checkpoints_path
             / f"checkpoint-{cfg.train.last_epoch}"
             / "checkpoint.pt",
             weights_only=False,
@@ -103,15 +105,30 @@ class MyTest:
                 )
 
         logger.info("save metrics")
-        logdir = self.model_path / "log" / "test" / self.target
+        logdir = self.logs_path / "test" / self.target
         if os.path.exists(logdir):
             logger.warning(f"{logdir.as_posix()} already exits, delete it.")
             shutil.rmtree(logdir)
         tensorboard_writer = SummaryWriter(logdir)
-        for metric_name, metric_fun in metrics.items():
+        metric_dict = {
+            f"test/{metric_name}": metric_fun.epoch()
+            for metric_name, metric_fun in metrics.items()
+        }
+        for metric_name in metrics.keys():
             tensorboard_writer.add_scalar(
-                f"test/{metric_name}", metric_fun.epoch(), cfg.train.last_epoch
+                tag=f"test/{metric_name}",
+                scalar_value=metric_dict[f"test/{metric_name}"],
+                global_step=cfg.train.last_epoch,
             )
+        tensorboard_writer.add_hparams(
+            hparam_dict={
+                "preprocess": model.data_collator.preprocess,
+                "model_type": model.model_type,
+                "target": self.target,
+            },
+            metric_dict=metric_dict,
+            global_step=cfg.train.last_epoch,
+        )
         tensorboard_writer.close()
 
         return cfg.train.last_epoch, logdir

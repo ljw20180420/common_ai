@@ -25,11 +25,24 @@ def instantiate_model(cfg: jsonargparse.Namespace) -> tuple:
     ), "preprocess or model type is inconsistent"
 
     output_dir = pathlib.Path(os.fspath(cfg.train.output_dir))
-    model_path = (
-        output_dir / preprocess / model_type / cfg.dataset.name / cfg.train.trial_name
+    checkpoints_path = (
+        output_dir
+        / "checkpoints"
+        / preprocess
+        / model_type
+        / cfg.dataset.name
+        / cfg.train.trial_name
+    )
+    logs_path = (
+        output_dir
+        / "logs"
+        / preprocess
+        / model_type
+        / cfg.dataset.name
+        / cfg.train.trial_name
     )
 
-    return model, model_path
+    return model, checkpoints_path, logs_path
 
 
 def get_latest_event_file(logdir: os.PathLike) -> tuple[pathlib.Path, int]:
@@ -47,19 +60,19 @@ def get_latest_event_file(logdir: os.PathLike) -> tuple[pathlib.Path, int]:
     return logdir / latest_event_file, latest_time
 
 
-def target_to_epoch(model_path: os.PathLike, target: str) -> int:
+def target_to_epoch(logs_path: os.PathLike, target: str) -> int:
     """
     Infer the epoch with the loweset metric (including loss).
     """
-    model_path = pathlib.Path(os.fspath(model_path))
+    logs_path = pathlib.Path(os.fspath(logs_path))
     latest_event_file_train, latest_time_train = get_latest_event_file(
-        model_path / "log" / "train"
+        logs_path / "train"
     )
     df_train = SummaryReader(latest_event_file_train.as_posix(), pivot=True).scalars
 
-    if os.path.exists(model_path / "log" / "eval"):
+    if os.path.exists(logs_path / "eval"):
         latest_event_file_eval, latest_time_eval = get_latest_event_file(
-            model_path / "log" / "eval"
+            logs_path / "eval"
         )
         if latest_time_eval > latest_time_train:
             df_eval = SummaryReader(
