@@ -7,6 +7,7 @@ import numpy as np
 import datasets
 import importlib
 import jsonargparse
+from typing import Optional
 from tbparse import SummaryReader
 
 
@@ -45,10 +46,12 @@ def instantiate_model(cfg: jsonargparse.Namespace) -> tuple:
     return model, checkpoints_path, logs_path
 
 
-def get_latest_event_file(logdir: os.PathLike) -> tuple[pathlib.Path, int]:
-    reg_obj = re.compile(r"^events\.out\.tfevents\.(\d+)\.")
+def get_latest_event_file(logdir: os.PathLike) -> Optional[pathlib.Path]:
     logdir = pathlib.Path(os.fspath(logdir))
-    latest_time = 0
+    if not os.path.exists(logdir):
+        return None
+    reg_obj = re.compile(r"^events\.out\.tfevents\.(\d+)\.")
+    latest_event_file, latest_time = None, 0
     for event_file in os.listdir(logdir):
         if os.path.isdir(logdir / event_file):
             continue
@@ -59,7 +62,9 @@ def get_latest_event_file(logdir: os.PathLike) -> tuple[pathlib.Path, int]:
             latest_time = current_file_time
             latest_event_file = event_file
 
-    return logdir / latest_event_file, latest_time
+    if latest_event_file is None:
+        return None
+    return logdir / latest_event_file
 
 
 def target_to_epoch(logs_path: os.PathLike, target: str) -> int:
@@ -67,23 +72,9 @@ def target_to_epoch(logs_path: os.PathLike, target: str) -> int:
     Infer the epoch with the loweset metric (including loss).
     """
     logs_path = pathlib.Path(os.fspath(logs_path))
-    latest_event_file_train, latest_time_train = get_latest_event_file(
-        logs_path / "train"
-    )
-    df_train = SummaryReader(latest_event_file_train.as_posix(), pivot=True).scalars
-
-    if os.path.exists(logs_path / "eval"):
-        latest_event_file_eval, latest_time_eval = get_latest_event_file(
-            logs_path / "eval"
-        )
-        if latest_time_eval > latest_time_train:
-            df_eval = SummaryReader(
-                latest_event_file_eval.as_posix(), pivot=True
-            ).scalars
-            for column in df_eval.columns:
-                df_train[column] = df_eval[column]
-
-    epoch = df_train["step"].iloc[df_train[f"eval/{target}"].argmin()].item()
+    latest_event_file_train = get_latest_event_file(logs_path / "train")
+    df = SummaryReader(latest_event_file_train.as_posix(), pivot=True).scalars
+    epoch = df["step"].iloc[df[f"eval/{target}"].argmin()].item()
 
     return epoch
 

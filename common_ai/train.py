@@ -13,7 +13,9 @@ from tqdm import tqdm
 import logging
 import jsonargparse
 import datasets
-from .utils import instantiate_model
+from tbparse import SummaryReader
+import pandas as pd
+from .utils import instantiate_model, get_latest_event_file
 
 from .logger import get_logger
 from .generator import MyGenerator
@@ -372,11 +374,14 @@ class MyTrain:
         logs_path = pathlib.Path(os.fspath(logs_path))
 
         logger.info("open tensorboard writer")
-        logdir = logs_path / "eval"
-        if os.path.exists(logdir):
-            logger.warning(f"{logdir.as_posix()} already exits, delete it.")
-            shutil.rmtree(logdir)
-        tensorboard_writer = SummaryWriter(logdir)
+        logdir = logs_path / "train"
+        latest_event_file = get_latest_event_file(logdir)
+        assert latest_event_file is not None, "cannot find train log"
+        logger.warning(
+            f"Find train log at {logdir.as_posix()}, load its content and delete it."
+        )
+        df = SummaryReader(latest_event_file.as_posix(), pivot=True).scalars
+        shutil.rmtree(logdir)
 
         logger.info("eval loop")
         for epoch in tqdm(range(self.last_epoch + 1, self.num_epochs)):
@@ -427,13 +432,11 @@ class MyTrain:
                     model, eval_dataloader, my_generator, metrics
                 )
 
-            tensorboard_writer.add_scalar("eval/loss", eval_loss, epoch)
-            tensorboard_writer.add_scalar("eval/loss_num", eval_loss_num, epoch)
-            tensorboard_writer.add_scalar(
-                "eval/mean_loss", eval_loss / eval_loss_num, epoch
-            )
+            df.loc[df["step"] == epoch, f"eval/loss"] = eval_loss
+            df.loc[df["step"] == epoch, f"eval/loss_num"] = eval_loss_num
+            df.loc[df["step"] == epoch, f"eval/mean_loss"] = eval_loss / eval_loss_num
             for metric_name, metric_val in metric_loss_dict.items():
-                tensorboard_writer.add_scalar(f"eval/{metric_name}", metric_val, epoch)
+                df.loc[df["step"] == epoch, f"eval/{metric_name}"] = metric_val
 
             logger.info(f"update config for epoch {epoch}")
             cfg.train.last_epoch = epoch
@@ -443,7 +446,13 @@ class MyTrain:
                 overwrite=True,
             )
 
-            logger.info(f"flush tensorboard log for epoch {epoch}")
-            tensorboard_writer.flush()
-
             yield epoch, logdir
+
+        logger.info("save tensorboard log")
+        tensorboard_writer = SummaryWriter(logdir)
+        for tag in df.columns:
+            if tag == "step":
+                continue
+            for epoch, scalar_value in zip(df["step"], df[tag]):
+                tensorboard_writer.add_scalar(tag, scalar_value, global_step=epoch)
+        tensorboard_writer.close()
