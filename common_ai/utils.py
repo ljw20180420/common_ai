@@ -50,6 +50,8 @@ def get_latest_event_file(logdir: os.PathLike) -> tuple[pathlib.Path, int]:
     logdir = pathlib.Path(os.fspath(logdir))
     latest_time = 0
     for event_file in os.listdir(logdir):
+        if os.path.isdir(logdir / event_file):
+            continue
         mat = reg_obj.search(event_file)
         assert mat is not None, "cannot deteramine latest_event_file"
         current_file_time = int(mat.group(1))
