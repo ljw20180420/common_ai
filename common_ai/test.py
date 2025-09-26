@@ -9,7 +9,6 @@ from torch.utils.tensorboard import SummaryWriter
 from typing import Literal
 import importlib
 import jsonargparse
-import datasets
 from .utils import instantiate_model, target_to_epoch
 from .logger import get_logger
 from .generator import MyGenerator
@@ -39,23 +38,19 @@ class MyTest:
         self.batch_size = batch_size
         self.device = device
 
-    def get_best_cfg(
+    @torch.no_grad()
+    def __call__(
         self,
         train_parser: jsonargparse.ArgumentParser,
-    ) -> jsonargparse.Namespace:
+    ) -> tuple[int, pathlib.Path]:
+        logger = get_logger(**cfg.logger.as_dict())
+
+        logger.info("get best epoch")
         best_epoch = target_to_epoch(self.logs_path, target=self.target)
         cfg = train_parser.parse_path(
             self.checkpoints_path / f"checkpoint-{best_epoch}" / "train.yaml"
         )
-        return cfg
 
-    @torch.no_grad()
-    def __call__(
-        self,
-        cfg: jsonargparse.Namespace,
-        dataset: datasets.Dataset,
-    ) -> tuple[int, pathlib.Path]:
-        logger = get_logger(**cfg.logger.as_dict())
         logger.info("instantiate model and random generator")
         model, _, _ = instantiate_model(cfg)
         my_generator = MyGenerator(**cfg.generator.as_dict())
@@ -85,6 +80,9 @@ class MyTest:
             model.eval()
 
         logger.info("setup data loader")
+        dataset = getattr(importlib.import_module("AI.dataset"), "get_dataset")(
+            **cfg.dataset.as_dict()
+        )
         test_dataloader = DataLoader(
             dataset=dataset["test"],
             batch_size=self.batch_size,

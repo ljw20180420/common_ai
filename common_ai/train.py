@@ -64,10 +64,12 @@ class MyTrain:
     def __call__(
         self,
         train_parser: jsonargparse.ArgumentParser,
-        cfg: jsonargparse.Namespace,
-        dataset: datasets.Dataset,
     ) -> Generator:
         logger = get_logger(**cfg.logger.as_dict())
+
+        logger.info("get train config")
+        cfg = train_parser.parse_args()
+
         logger.info("instantiate model and random generator")
         model, checkpoints_path, logs_path = instantiate_model(cfg)
         my_generator = MyGenerator(**cfg.generator.as_dict())
@@ -84,7 +86,6 @@ class MyTrain:
             for epoch, logdir in self.my_train_model(
                 train_parser,
                 cfg,
-                dataset,
                 model,
                 checkpoints_path,
                 logs_path,
@@ -97,7 +98,6 @@ class MyTrain:
             for epoch, logdir in self.my_eval_model(
                 train_parser,
                 cfg,
-                dataset,
                 model,
                 checkpoints_path,
                 logs_path,
@@ -195,7 +195,6 @@ class MyTrain:
         self,
         train_parser: jsonargparse.ArgumentParser,
         cfg: jsonargparse.Namespace,
-        dataset: datasets.Dataset,
         model: object,
         checkpoints_path: os.PathLike,
         logs_path: os.PathLike,
@@ -243,6 +242,9 @@ class MyTrain:
             my_lr_scheduler(my_optimizer)
 
         logger.info("setup data loader")
+        dataset = getattr(importlib.import_module("AI.dataset"), "get_dataset")(
+            **cfg.dataset.as_dict()
+        )
         train_dataloader = torch.utils.data.DataLoader(
             dataset=dataset["train"],
             batch_size=self.batch_size,
@@ -362,7 +364,6 @@ class MyTrain:
         self,
         train_parser: jsonargparse.ArgumentParser,
         cfg: jsonargparse.Namespace,
-        dataset: datasets.Dataset,
         model: object,
         checkpoints_path: os.PathLike,
         logs_path: os.PathLike,
@@ -416,6 +417,9 @@ class MyTrain:
                 model = model.to(self.device)
 
             logger.info("setup data loader")
+            dataset = getattr(importlib.import_module("AI.dataset"), "get_dataset")(
+                **cfg.dataset.as_dict()
+            )
             eval_dataloader = DataLoader(
                 dataset=dataset["validation"],
                 batch_size=self.batch_size,
