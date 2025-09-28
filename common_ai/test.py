@@ -43,13 +43,11 @@ class MyTest:
         self,
         train_parser: jsonargparse.ArgumentParser,
     ) -> tuple[int, pathlib.Path]:
-        logger = get_logger(**cfg.logger.as_dict())
-
-        logger.info("get best epoch")
         best_epoch = target_to_epoch(self.logs_path, target=self.target)
         cfg = train_parser.parse_path(
             self.checkpoints_path / f"checkpoint-{best_epoch}" / "train.yaml"
         )
+        logger = get_logger(**cfg.logger.as_dict())
 
         logger.info("instantiate model and random generator")
         model, _, _ = instantiate_model(cfg)

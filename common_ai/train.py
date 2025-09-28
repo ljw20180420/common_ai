@@ -12,9 +12,8 @@ import importlib
 from tqdm import tqdm
 import logging
 import jsonargparse
-import datasets
 from tbparse import SummaryReader
-import pandas as pd
+import re
 from .utils import instantiate_model, get_latest_event_file
 
 from .logger import get_logger
@@ -64,11 +63,9 @@ class MyTrain:
     def __call__(
         self,
         train_parser: jsonargparse.ArgumentParser,
+        cfg: jsonargparse.Namespace,
     ) -> Generator:
         logger = get_logger(**cfg.logger.as_dict())
-
-        logger.info("get train config")
-        cfg = train_parser.parse_args()
 
         logger.info("instantiate model and random generator")
         model, checkpoints_path, logs_path = instantiate_model(cfg)
@@ -397,7 +394,7 @@ class MyTrain:
                     "train.evaluation_only",
                     "model.__path__",
                     "metric",
-                ]:
+                ] or re.search(r"^.+\.__path__$", key):
                     continue
                 assert (
                     cfg[key] == cfg_train[key]
