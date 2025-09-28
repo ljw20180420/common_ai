@@ -3,7 +3,11 @@ import numpy as np
 
 
 class MyGenerator:
-    def __init__(self, seed: int) -> None:
+    def __init__(
+        self,
+        seed: int,
+        **kwargs,
+    ) -> None:
         """Generator arguments.
 
         Args:

@@ -7,6 +7,7 @@ def get_logger(
     log_level: Literal[
         "CRITICAL", "FATAL", "ERROR", "WARNING", "INFO", "DEBUG", "NOTSET"
     ],
+    **kwargs,
 ) -> None:
     """Logger arguments.
 

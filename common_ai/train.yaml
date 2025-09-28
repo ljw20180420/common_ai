@@ -9,25 +9,14 @@ train:
   device: cuda # cuda, cpu
   evaluation_only: false
 
-logger:
-  log_level: WARNING # CRITICAL, FATAL, ERROR, WARNING, INFO, DEBUG, NOTSET
+logger: component/logger.yaml
 
-generator:
-  seed: 63036
+generator: component/generator.yaml
 
-initializer:
-  name: kaiming_uniform_ # uniform_, normal_, xavier_uniform_, xavier_normal_, kaiming_uniform_, kaiming_normal_, trunc_normal_
+initializer: component/initializer.yaml
 
-optimizer:
-  name: AdamW # Adadelta, Adafactor, Adagrad, Adam, AdamW, SparseAdam, Adamax, ASGD, LBFGS, NAdam, RAdam, RMSprop, Rprop, SGD
-  learning_rate: 0.0001
-  weight_decay: 0.0
+optimizer: component/optimizer.yaml
 
-lr_scheduler:
-  name: CosineAnnealingWarmRestarts # CosineAnnealingWarmRestarts, ConstantLR, ReduceLROnPlateau, LRScheduler,
-  warmup_epochs: 3
-  period_epochs: 30
+lr_scheduler: component/lr_scheduler.yaml
 
-early_stopping:
-  patience: null
-  delta: 0.0
+early_stopping: component/early_stopping.yaml

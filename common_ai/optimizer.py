@@ -25,6 +25,7 @@ class MyOptimizer:
         ],
         learning_rate: float,
         weight_decay: float,
+        **kwargs,
     ) -> None:
         """Parameters of optimizer.
 

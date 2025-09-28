@@ -13,6 +13,7 @@ class MyLrScheduler:
         ],
         warmup_epochs: int,
         period_epochs: int,
+        **kwargs,
     ) -> None:
         """Parameters for learning rate scheduler.
 

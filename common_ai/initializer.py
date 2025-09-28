@@ -15,6 +15,7 @@ class MyInitializer:
             "kaiming_normal_",
             "trunc_normal_",
         ],
+        **kwargs,
     ) -> None:
         """Initializer arguments.
 

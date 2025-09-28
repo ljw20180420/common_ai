@@ -6,6 +6,7 @@ class MyEarlyStopping:
         self,
         patience: Optional[int],
         delta: float,
+        **kwargs,
     ) -> None:
         """Early stopping arguments.
 
