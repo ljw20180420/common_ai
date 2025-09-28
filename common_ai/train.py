@@ -63,8 +63,8 @@ class MyTrain:
     def __call__(
         self,
         train_parser: jsonargparse.ArgumentParser,
-        cfg: jsonargparse.Namespace,
     ) -> Generator:
+        cfg = train_parser.parse_args(train_parser.args)
         logger = get_logger(**cfg.logger.as_dict())
 
         logger.info("instantiate model and random generator")
