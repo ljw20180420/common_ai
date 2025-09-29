@@ -24,7 +24,7 @@ def instantiate_model(cfg: jsonargparse.Namespace) -> tuple:
         / "checkpoints"
         / preprocess
         / model_cls
-        / cfg.dataset.name
+        / cfg.dataset.init_args.name
         / cfg.train.trial_name
     )
     logs_path = (
@@ -32,7 +32,7 @@ def instantiate_model(cfg: jsonargparse.Namespace) -> tuple:
         / "logs"
         / preprocess
         / model_cls
-        / cfg.dataset.name
+        / cfg.dataset.init_args.name
         / cfg.train.trial_name
     )
 

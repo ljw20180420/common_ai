@@ -20,8 +20,6 @@ class MyTest:
         checkpoints_path: os.PathLike,
         logs_path: os.PathLike,
         target: str,
-        batch_size: int,
-        device: Literal["cpu", "cuda"],
         **kwargs,
     ) -> None:
         """Test arguments.
@@ -30,14 +28,10 @@ class MyTest:
             checkpoints_path: path to the model checkpoints.
             logs_path: path to the model logs.
             target: target metric name.
-            batch_size: Batch size.
-            device: device.
         """
         self.checkpoints_path = pathlib.Path(os.fspath(checkpoints_path))
         self.logs_path = pathlib.Path(os.fspath(logs_path))
         self.target = target
-        self.batch_size = batch_size
-        self.device = device
 
     @torch.no_grad()
     def __call__(
@@ -73,9 +67,9 @@ class MyTest:
         my_generator.load_state_dict(checkpoint["generator"])
 
         logger.info("set model device")
-        setattr(model, "device", self.device)
+        setattr(model, "device", cfg.train.device)
         if isinstance(model, nn.Module):
-            model = model.to(self.device)
+            model = model.to(cfg.train.device)
             model.eval()
 
         logger.info("setup data loader")
@@ -85,7 +79,7 @@ class MyTest:
         )()
         test_dataloader = DataLoader(
             dataset=dataset["test"],
-            batch_size=self.batch_size,
+            batch_size=cfg.train.batch_size,
             collate_fn=lambda examples: examples,
         )
 

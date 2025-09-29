@@ -1,6 +1,3 @@
-test:
-  # checkpoints_path:
-  # logs_path:
-  # target:
-  batch_size: 100
-  device: cuda # cuda, cpu
+# checkpoints_path:
+# logs_path:
+# target:

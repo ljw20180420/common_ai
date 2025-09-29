@@ -7,6 +7,7 @@ from .initializer import MyInitializer
 from .optimizer import MyOptimizer
 from .lr_scheduler import MyLrScheduler
 from .early_stopping import MyEarlyStopping
+from .dataset import MyDatasetAbstract
 
 
 def get_config() -> tuple[jsonargparse.ArgumentParser]:
@@ -14,11 +15,6 @@ def get_config() -> tuple[jsonargparse.ArgumentParser]:
         description="Arguments of AI models.",
     )
     subcommands = parser.add_subcommands(required=True, dest="subcommand")
-
-    test_parser = jsonargparse.ArgumentParser(description="Test AI models.")
-    test_parser.add_argument("--config", action="config")
-    test_parser.add_class_arguments(theclass=MyTest, nested_key="test")
-    subcommands.add_subcommand(name="test", parser=test_parser)
 
     train_parser = jsonargparse.ArgumentParser(description="Train AI models.")
     train_parser.add_argument("--config", action="config")
@@ -48,7 +44,16 @@ def get_config() -> tuple[jsonargparse.ArgumentParser]:
         theclass=MyEarlyStopping,
         nested_key="early_stopping",
     )
-
+    train_parser.add_subclass_arguments(
+        baseclass=MyDatasetAbstract,
+        nested_key="dataset",
+    )
     subcommands.add_subcommand(name="train", parser=train_parser)
+
+    test_parser = jsonargparse.ArgumentParser(description="Test AI models.")
+    test_parser.add_argument("--config", action="config")
+    test_parser.add_class_arguments(theclass=MyTest, nested_key=None)
+
+    subcommands.add_subcommand(name="test", parser=test_parser)
 
     return parser, train_parser, test_parser
