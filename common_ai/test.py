@@ -22,6 +22,7 @@ class MyTest:
         target: str,
         batch_size: int,
         device: Literal["cpu", "cuda"],
+        **kwargs,
     ) -> None:
         """Test arguments.
 
@@ -78,9 +79,10 @@ class MyTest:
             model.eval()
 
         logger.info("setup data loader")
-        dataset = getattr(importlib.import_module("AI.dataset"), "get_dataset")(
-            **cfg.dataset.as_dict()
-        )
+        dataset_module, dataset_cls = cfg.dataset.class_path.rsplit(".", 1)
+        dataset = getattr(importlib.import_module(dataset_module), dataset_cls)(
+            **cfg.dataset.init_args.as_dict()
+        )()
         test_dataloader = DataLoader(
             dataset=dataset["test"],
             batch_size=self.batch_size,
@@ -116,10 +118,11 @@ class MyTest:
                 scalar_value=metric_dict[f"test/{metric_name}"],
                 global_step=cfg.train.last_epoch,
             )
+        _, preprocess, _, model_cls = cfg.model.class_path.rsplit(".", 3)
         tensorboard_writer.add_hparams(
             hparam_dict={
-                "preprocess": model.data_collator.preprocess,
-                "model_type": model.model_type,
+                "preprocess": preprocess,
+                "model_cls": model_cls,
                 "target": self.target,
             },
             metric_dict=metric_dict,

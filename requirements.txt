@@ -3,3 +3,4 @@ jsonargparse[all]
 opt_einsum
 einops
 tbparse
+optuna

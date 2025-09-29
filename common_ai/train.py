@@ -36,6 +36,7 @@ class MyTrain:
         accumulate_steps: int,
         device: Literal["cpu", "cuda"],
         evaluation_only: bool,
+        **kwargs,
     ):
         """Train arguments.
 
@@ -239,9 +240,10 @@ class MyTrain:
             my_lr_scheduler(my_optimizer)
 
         logger.info("setup data loader")
-        dataset = getattr(importlib.import_module("AI.dataset"), "get_dataset")(
-            **cfg.dataset.as_dict()
-        )
+        dataset_module, dataset_cls = cfg.dataset.class_path.rsplit(".", 1)
+        dataset = getattr(importlib.import_module(dataset_module), dataset_cls)(
+            **cfg.dataset.init_args.as_dict()
+        )()
         train_dataloader = torch.utils.data.DataLoader(
             dataset=dataset["train"],
             batch_size=self.batch_size,
@@ -272,11 +274,7 @@ class MyTrain:
             logger.info(f"train epoch {epoch}")
             if hasattr(model, "my_train_epoch"):
                 train_loss, train_loss_num, grad_norm = model.my_train_epoch(
-                    self,
-                    train_dataloader,
-                    eval_dataloader,
-                    my_generator,
-                    my_optimizer,
+                    self, train_dataloader, eval_dataloader, my_generator, my_optimizer
                 )
             else:
                 train_loss, train_loss_num, grad_norm = self.my_train_epoch(
@@ -414,9 +412,10 @@ class MyTrain:
                 model = model.to(self.device)
 
             logger.info("setup data loader")
-            dataset = getattr(importlib.import_module("AI.dataset"), "get_dataset")(
-                **cfg.dataset.as_dict()
-            )
+            dataset_module, dataset_cls = cfg.dataset.class_path.rsplit(".", 1)
+            dataset = getattr(importlib.import_module(dataset_module), dataset_cls)(
+                **cfg.dataset.init_args.as_dict()
+            )()
             eval_dataloader = DataLoader(
                 dataset=dataset["validation"],
                 batch_size=self.batch_size,

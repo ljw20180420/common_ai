@@ -12,25 +12,18 @@ from tbparse import SummaryReader
 
 
 def instantiate_model(cfg: jsonargparse.Namespace) -> tuple:
-    reg_obj = re.search(
-        r"^AI\.preprocess\.(.+)\.model\.(.+)Model$", cfg.model.class_path
-    )
-    preprocess = reg_obj.group(1)
-    model_type = reg_obj.group(2)
-    model_module = importlib.import_module(f"AI.preprocess.{preprocess}.model")
-    model = getattr(model_module, f"{model_type}Model")(
+    model_module, model_cls = cfg.model.class_path.rsplit(".", 1)
+    _, preprocess, _ = model_module.rsplit(".", 2)
+    model = getattr(importlib.import_module(model_module), model_cls)(
         **cfg.model.init_args.as_dict(),
     )
-    assert (
-        preprocess == model.data_collator.preprocess and model_type == model.model_type
-    ), "preprocess or model type is inconsistent"
 
     output_dir = pathlib.Path(os.fspath(cfg.train.output_dir))
     checkpoints_path = (
         output_dir
         / "checkpoints"
         / preprocess
-        / model_type
+        / model_cls
         / cfg.dataset.name
         / cfg.train.trial_name
     )
@@ -38,7 +31,7 @@ def instantiate_model(cfg: jsonargparse.Namespace) -> tuple:
         output_dir
         / "logs"
         / preprocess
-        / model_type
+        / model_cls
         / cfg.dataset.name
         / cfg.train.trial_name
     )
