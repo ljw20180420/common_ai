@@ -1,6 +1,7 @@
 import jsonargparse
 from .train import MyTrain
 from .test import MyTest
+from .hpo import MyHpo
 from .logger import get_logger
 from .generator import MyGenerator
 from .initializer import MyInitializer
@@ -12,12 +13,7 @@ from .metric import MyMetricAbstract
 from .model import MyModelAbstract
 
 
-def get_config() -> tuple[jsonargparse.ArgumentParser]:
-    parser = jsonargparse.ArgumentParser(
-        description="Arguments of AI models.",
-    )
-    subcommands = parser.add_subcommands(required=True, dest="subcommand")
-
+def get_train_parser():
     train_parser = jsonargparse.ArgumentParser(description="Train AI models.")
     train_parser.add_argument("--config", action="config")
     train_parser.add_class_arguments(theclass=MyTrain, nested_key="train")
@@ -61,12 +57,42 @@ def get_config() -> tuple[jsonargparse.ArgumentParser]:
         baseclass=MyModelAbstract,
         nested_key="model",
     )
-    subcommands.add_subcommand(name="train", parser=train_parser)
 
+    return train_parser
+
+
+def get_test_parser():
     test_parser = jsonargparse.ArgumentParser(description="Test AI models.")
     test_parser.add_argument("--config", action="config")
     test_parser.add_class_arguments(theclass=MyTest, nested_key=None)
 
+    return test_parser
+
+
+def get_hpo_parser():
+    hpo_parser = jsonargparse.ArgumentParser(description="Hpo AI models.")
+    hpo_parser.add_argument("--config", action="config")
+    hpo_parser.add_class_arguments(theclass=MyHpo, nested_key="hpo")
+    hpo_parser.add_argument(
+        "--train", action=jsonargparse.ActionParser(parser=get_train_parser())
+    )
+
+    return hpo_parser
+
+
+def get_config() -> tuple[jsonargparse.ArgumentParser]:
+    parser = jsonargparse.ArgumentParser(
+        description="Arguments of AI models.",
+    )
+    subcommands = parser.add_subcommands(required=True, dest="subcommand")
+
+    train_parser = get_train_parser()
+    subcommands.add_subcommand(name="train", parser=train_parser)
+
+    test_parser = get_test_parser()
     subcommands.add_subcommand(name="test", parser=test_parser)
 
-    return parser, train_parser, test_parser
+    hpo_parser = get_hpo_parser()
+    subcommands.add_subcommand(name="hpo", parser=hpo_parser)
+
+    return parser, train_parser, test_parser, hpo_parser

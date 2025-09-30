@@ -3,7 +3,7 @@
 import importlib
 import os
 import pathlib
-from typing import Literal
+from typing import Literal, Callable
 
 import jsonargparse
 import optuna
@@ -16,8 +16,8 @@ import logging
 from .test import MyTest
 from .train import MyTrain
 from .logger import get_logger
-from .initializer import MyInitializer
 from .utils import get_latest_event_file
+
 
 # change directory to the current script
 os.chdir(pathlib.Path(__file__).parent)
@@ -26,14 +26,16 @@ os.chdir(pathlib.Path(__file__).parent)
 class Objective:
     def __init__(
         self,
-        train_parser: jsonargparse.ArgumentParser,
+        hpo_parser: jsonargparse.ArgumentParser,
+        get_train_parser: Callable,
         target: str,
         logger: logging.Logger,
     ) -> None:
-        self.train_parser = train_parser
+        self.hpo_parser = hpo_parser
+        self.get_train_parser = get_train_parser
         self.target = target
         self.logger = logger
-        cfg = train_parser.parse_args(train_parser.args)
+        cfg = hpo_parser.parse_args(hpo_parser.args).train
         _, preprocess, _, model_cls = cfg.model.class_path.rsplit(".", 3)
         self.checkpoints_parent = (
             pathlib.Path(cfg.train.output_dir)
@@ -43,7 +45,7 @@ class Objective:
             / cfg.dataset.init_args.name
         )
         self.logs_parent = (
-            pathlib.Path(cfg.hpo.output_dir)
+            pathlib.Path(cfg.train.output_dir)
             / "logs"
             / preprocess
             / model_cls
@@ -51,20 +53,21 @@ class Objective:
         )
 
     def __call__(self, trial: optuna.Trial):
-        trial_name = f"{self.cfg.train.trial_name}-{trial._trial_id}"
+        cfg = self.hpo_parser.parse_args(self.hpo_parser.args).train
+        trial_name = f"{cfg.train.trial_name}-{trial._trial_id}"
         checkpoints_path = self.checkpoints_parent / trial_name
         logs_path = self.logs_parent / trial_name
         os.makedirs(checkpoints_path, exist_ok=True)
-        cfg = self.train_parser.parse_args(self.train_parser.args)
         model_module, model_cls = cfg.model.class_path.rsplit(".", 1)
-        _, preprocess, _ = model_module.rsplit(".", 2)
 
         self.logger.info("mandatory train config")
         cfg.train.trial_name = trial_name
         cfg.train.last_epoch = -1
         cfg.train.evaluation_only = False
 
-        if issubclass(getattr(model_module, model_cls), nn.Module):
+        if issubclass(
+            getattr(importlib.import_module(model_module), model_cls), nn.Module
+        ):
             self.logger.info("choose initializer config")
             cfg.initializer.name = trial.suggest_categorical(
                 "initializer/name",
@@ -96,8 +99,8 @@ class Objective:
                     "SGD",
                 ],
             )
-            cfg.optimizer.learning_rate = (
-                trial.suggest_float("optimizer/learning_rate", 1e-5, 1e-2, log=True),
+            cfg.optimizer.learning_rate = trial.suggest_float(
+                "optimizer/learning_rate", 1e-5, 1e-2, log=True
             )
 
             self.logger.info("choose lr_scheduler config")
@@ -123,7 +126,9 @@ class Objective:
         getattr(importlib.import_module(model_module), model_cls).hpo(trial, cfg)
 
         self.logger.info("write train config")
-        self.train_parser.save(cfg, checkpoints_path / "train.yaml")
+        train_parser = self.get_train_parser()
+        train_parser.save(cfg, checkpoints_path / "train.yaml")
+        train_parser.args = ["--config", (checkpoints_path / "train.yaml").as_posix()]
 
         self.logger.info("write test config")
         with open(checkpoints_path / "test.yaml", "w") as fd:
@@ -137,7 +142,7 @@ class Objective:
             )
 
         # train
-        for epoch, logdir in MyTrain(**cfg.train.as_dict())(self.train_parser):
+        for epoch, logdir in MyTrain(**cfg.train.as_dict())(train_parser):
             latest_event_file = get_latest_event_file(logdir)
             df = SummaryReader(latest_event_file.as_posix(), pivot=True).scalars
             trial.report(
@@ -152,7 +157,7 @@ class Objective:
             checkpoints_path=checkpoints_path,
             logs_path=logs_path,
             target=self.target,
-        )(self.train_parser)
+        )(train_parser)
         latest_event_file = get_latest_event_file(logdir)
         df = SummaryReader(latest_event_file.as_posix(), pivot=True).scalars
         target_metric_val = df.loc[df["step"] == epoch, f"test/{self.target}"].item()
@@ -215,14 +220,16 @@ class MyHpo:
 
     def __call__(
         self,
-        train_parser: jsonargparse.ArgumentParser,
+        hpo_parser: jsonargparse.ArgumentParser,
+        get_train_parser: Callable,
     ) -> None:
-        cfg = train_parser.parse_args(train_parser.args)
+        cfg = hpo_parser.parse_args(hpo_parser.args).train
         logger = get_logger(**cfg.logger.as_dict())
 
         logger.info("instantiate objective")
         objective = Objective(
-            train_parser=train_parser,
+            hpo_parser=hpo_parser,
+            get_train_parser=get_train_parser,
             target=self.target,
             logger=logger,
         )
