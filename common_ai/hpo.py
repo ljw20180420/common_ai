@@ -165,7 +165,7 @@ class Objective:
         tensorboard_writer.add_hparams(
             hparam_dict=trial.params,
             metric_dict={f"test/{self.target}": target_metric_val},
-            global_step=trial._trial_id,
+            global_step=epoch,
         )
         tensorboard_writer.close()
 

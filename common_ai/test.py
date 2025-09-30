@@ -58,9 +58,7 @@ class MyTest:
 
         logger.info("load checkpoint for model and random generator")
         checkpoint = torch.load(
-            self.checkpoints_path
-            / f"checkpoint-{cfg.train.last_epoch}"
-            / "checkpoint.pt",
+            self.checkpoints_path / f"checkpoint-{best_epoch}" / "checkpoint.pt",
             weights_only=False,
         )
         model.load_state_dict(checkpoint["model"])
@@ -110,7 +108,7 @@ class MyTest:
             tensorboard_writer.add_scalar(
                 tag=f"test/{metric_name}",
                 scalar_value=metric_dict[f"test/{metric_name}"],
-                global_step=cfg.train.last_epoch,
+                global_step=best_epoch,
             )
         _, preprocess, _, model_cls = cfg.model.class_path.rsplit(".", 3)
         tensorboard_writer.add_hparams(
@@ -120,8 +118,8 @@ class MyTest:
                 "target": self.target,
             },
             metric_dict=metric_dict,
-            global_step=cfg.train.last_epoch,
+            global_step=best_epoch,
         )
         tensorboard_writer.close()
 
-        return cfg.train.last_epoch, logdir
+        return best_epoch, logdir
