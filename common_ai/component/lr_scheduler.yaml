@@ -1,0 +1,3 @@
+name: CosineAnnealingWarmRestarts # CosineAnnealingWarmRestarts, ConstantLR, ReduceLROnPlateau
+warmup_epochs: 3
+period_epochs: 30
