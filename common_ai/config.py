@@ -8,6 +8,8 @@ from .optimizer import MyOptimizer
 from .lr_scheduler import MyLrScheduler
 from .early_stopping import MyEarlyStopping
 from .dataset import MyDatasetAbstract
+from .metric import MyMetricAbstract
+from .model import MyModelAbstract
 
 
 def get_config() -> tuple[jsonargparse.ArgumentParser]:
@@ -47,6 +49,17 @@ def get_config() -> tuple[jsonargparse.ArgumentParser]:
     train_parser.add_subclass_arguments(
         baseclass=MyDatasetAbstract,
         nested_key="dataset",
+    )
+    train_parser.add_argument(
+        "--metric",
+        nargs="+",
+        type=MyMetricAbstract,
+        required=True,
+        enable_path=True,
+    )
+    train_parser.add_subclass_arguments(
+        baseclass=MyModelAbstract,
+        nested_key="model",
     )
     subcommands.add_subcommand(name="train", parser=train_parser)
 

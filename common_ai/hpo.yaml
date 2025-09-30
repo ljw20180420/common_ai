@@ -1,0 +1,9 @@
+hpo:
+  # target:
+  # study_name:
+  n_trials: 10
+  sampler: TPESampler # GridSampler, RandomSampler, TPESampler, CmaEsSampler, GPSampler, PartialFixedSampler, NSGAIISampler, QMCSampler
+  pruner: SuccessiveHalvingPruner # MedianPruner, NopPruner, PatientPruner, PercentilePruner, SuccessiveHalvingPruner, HyperbandPruner, ThresholdPruner, WilcoxonPruner,
+  load_if_exists: false
+
+train: train.yaml

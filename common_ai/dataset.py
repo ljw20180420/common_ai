@@ -2,7 +2,7 @@ from abc import ABC, abstractmethod
 import os
 
 
-class MyDatasetAbstract:
+class MyDatasetAbstract(ABC):
     def __init__(
         self,
         data_file: os.PathLike,
