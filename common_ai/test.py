@@ -97,7 +97,7 @@ class MyTest:
         logger.info("save metrics")
         logdir = self.logs_path / "test" / self.target
         if os.path.exists(logdir):
-            logger.warning(f"{logdir.as_posix()} already exits, delete it.")
+            logger.warning(f"{os.fspath(logdir)} already exits, delete it.")
             shutil.rmtree(logdir)
         tensorboard_writer = SummaryWriter(logdir)
         _, preprocess, _, model_cls = cfg.model.class_path.rsplit(".", 3)

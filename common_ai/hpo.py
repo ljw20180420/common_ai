@@ -128,14 +128,14 @@ class Objective:
         self.logger.info("write train config")
         train_parser = self.get_train_parser()
         train_parser.save(cfg, checkpoints_path / "train.yaml")
-        train_parser.args = ["--config", (checkpoints_path / "train.yaml").as_posix()]
+        train_parser.args = ["--config", os.fspath(checkpoints_path / "train.yaml")]
 
         self.logger.info("write test config")
         with open(checkpoints_path / "test.yaml", "w") as fd:
             yaml.dump(
                 {
-                    "checkpoints_path": checkpoints_path,
-                    "logs_path": logs_path,
+                    "checkpoints_path": os.fspath(checkpoints_path),
+                    "logs_path": os.fspath(logs_path),
                     "target": self.target,
                 },
                 fd,
@@ -143,7 +143,7 @@ class Objective:
 
         # train
         for epoch, logdir in MyTrain(**cfg.train.as_dict())(train_parser):
-            df = SummaryReader(logdir.as_posix(), pivot=True).scalars
+            df = SummaryReader(os.fspath(logdir), pivot=True).scalars
             trial.report(
                 value=df.loc[df["step"] == epoch, f"eval/{self.target}"].item(),
                 step=epoch,
@@ -157,7 +157,7 @@ class Objective:
             logs_path=logs_path,
             target=self.target,
         )(train_parser)
-        df = SummaryReader(logdir.as_posix(), pivot=True).scalars
+        df = SummaryReader(os.fspath(logdir), pivot=True).scalars
         target_metric_val = df.loc[df["step"] == epoch, f"test/{self.target}"].item()
         tensorboard_writer = SummaryWriter(self.logs_parent / "hpo")
         hparam_dict = {
@@ -249,7 +249,7 @@ class MyHpo:
         study = optuna.create_study(
             storage=optuna.storages.JournalStorage(
                 optuna.storages.journal.JournalFileBackend(
-                    (objective.logs_parent / "optuna_journal_storage.log").as_posix()
+                    os.fspath(objective.logs_parent / "optuna_journal_storage.log")
                 ),
             ),
             sampler=getattr(importlib.import_module("optuna.samplers"), self.sampler)(),

@@ -44,7 +44,7 @@ def target_to_epoch(logs_path: os.PathLike, target: str) -> int:
     logdir = logs_path / "train"
     assert os.path.exists(logdir) and len(os.listdir(logdir)) > 0, "no train log"
     assert len(os.listdir(logdir)) == 1, "find more than one train log"
-    df = SummaryReader(logdir.as_posix(), pivot=True).scalars
+    df = SummaryReader(os.fspath(logdir), pivot=True).scalars
     epoch = df["step"].iloc[df[f"eval/{target}"].argmin()].item()
 
     return epoch
