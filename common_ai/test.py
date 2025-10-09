@@ -87,8 +87,8 @@ class MyTest:
                 examples, output_label=True, my_generator=my_generator
             )
             df = model.eval_output(examples, batch, my_generator)
-            for metric_name, metric_fun in metrics.items():
-                metric_fun.step(
+            for metric_cls, metric_inst in metrics.items():
+                metric_inst.step(
                     df=df,
                     examples=examples,
                     batch=batch,
@@ -100,16 +100,6 @@ class MyTest:
             logger.warning(f"{logdir.as_posix()} already exits, delete it.")
             shutil.rmtree(logdir)
         tensorboard_writer = SummaryWriter(logdir)
-        metric_dict = {
-            f"test/{metric_name}": metric_fun.epoch()
-            for metric_name, metric_fun in metrics.items()
-        }
-        for metric_name in metrics.keys():
-            tensorboard_writer.add_scalar(
-                tag=f"test/{metric_name}",
-                scalar_value=metric_dict[f"test/{metric_name}"],
-                global_step=best_epoch,
-            )
         _, preprocess, _, model_cls = cfg.model.class_path.rsplit(".", 3)
         tensorboard_writer.add_hparams(
             hparam_dict={
@@ -117,7 +107,10 @@ class MyTest:
                 "model_cls": model_cls,
                 "target": self.target,
             },
-            metric_dict=metric_dict,
+            metric_dict={
+                f"test/{metric_cls}": metric_inst.epoch()
+                for metric_cls, metric_inst in metrics.items()
+            },
             global_step=best_epoch,
         )
         tensorboard_writer.close()

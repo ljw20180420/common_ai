@@ -23,5 +23,5 @@ class MyDatasetAbstract(ABC):
 
     @classmethod
     @abstractmethod
-    def hpo(self):
+    def hpo(cls):
         pass

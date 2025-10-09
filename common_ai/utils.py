@@ -1,13 +1,10 @@
 from torch import nn
-
-import re
 import os
 import pathlib
 import numpy as np
 import datasets
 import importlib
 import jsonargparse
-from typing import Optional
 from tbparse import SummaryReader
 
 
@@ -39,34 +36,15 @@ def instantiate_model(cfg: jsonargparse.Namespace) -> tuple:
     return model, checkpoints_path, logs_path
 
 
-def get_latest_event_file(logdir: os.PathLike) -> Optional[pathlib.Path]:
-    logdir = pathlib.Path(os.fspath(logdir))
-    if not os.path.exists(logdir):
-        return None
-    reg_obj = re.compile(r"^events\.out\.tfevents\.(\d+)\.")
-    latest_event_file, latest_time = None, 0
-    for event_file in os.listdir(logdir):
-        if os.path.isdir(logdir / event_file):
-            continue
-        mat = reg_obj.search(event_file)
-        assert mat is not None, "cannot deteramine latest_event_file"
-        current_file_time = int(mat.group(1))
-        if current_file_time > latest_time:
-            latest_time = current_file_time
-            latest_event_file = event_file
-
-    if latest_event_file is None:
-        return None
-    return logdir / latest_event_file
-
-
 def target_to_epoch(logs_path: os.PathLike, target: str) -> int:
     """
     Infer the epoch with the loweset metric (including loss).
     """
     logs_path = pathlib.Path(os.fspath(logs_path))
-    latest_event_file_train = get_latest_event_file(logs_path / "train")
-    df = SummaryReader(latest_event_file_train.as_posix(), pivot=True).scalars
+    logdir = logs_path / "train"
+    assert os.path.exists(logdir) and len(os.listdir(logdir)) > 0, "no train log"
+    assert len(os.listdir(logdir)) == 1, "find more than one train log"
+    df = SummaryReader(logdir.as_posix(), pivot=True).scalars
     epoch = df["step"].iloc[df[f"eval/{target}"].argmin()].item()
 
     return epoch

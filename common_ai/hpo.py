@@ -7,6 +7,7 @@ from typing import Literal, Callable
 
 import jsonargparse
 import optuna
+import torch
 from torch import nn
 import yaml
 import importlib
@@ -16,7 +17,6 @@ import logging
 from .test import MyTest
 from .train import MyTrain
 from .logger import get_logger
-from .utils import get_latest_event_file
 
 
 # change directory to the current script
@@ -143,8 +143,7 @@ class Objective:
 
         # train
         for epoch, logdir in MyTrain(**cfg.train.as_dict())(train_parser):
-            latest_event_file = get_latest_event_file(logdir)
-            df = SummaryReader(latest_event_file.as_posix(), pivot=True).scalars
+            df = SummaryReader(logdir.as_posix(), pivot=True).scalars
             trial.report(
                 value=df.loc[df["step"] == epoch, f"eval/{self.target}"].item(),
                 step=epoch,
@@ -158,14 +157,25 @@ class Objective:
             logs_path=logs_path,
             target=self.target,
         )(train_parser)
-        latest_event_file = get_latest_event_file(logdir)
-        df = SummaryReader(latest_event_file.as_posix(), pivot=True).scalars
+        df = SummaryReader(logdir.as_posix(), pivot=True).scalars
         target_metric_val = df.loc[df["step"] == epoch, f"test/{self.target}"].item()
         tensorboard_writer = SummaryWriter(self.logs_parent / "hpo")
+        hparam_dict = {
+            param_name: (
+                param_val
+                if isinstance(param_val, int)
+                or isinstance(param_val, float)
+                or isinstance(param_val, str)
+                or isinstance(param_val, bool)
+                or isinstance(param_val, torch.Tensor)
+                else str(param_val)
+            )
+            for param_name, param_val in trial.params.items()
+        }
         tensorboard_writer.add_hparams(
-            hparam_dict=trial.params,
+            hparam_dict=hparam_dict,
             metric_dict={f"test/{self.target}": target_metric_val},
-            global_step=epoch,
+            global_step=trial._trial_id,
         )
         tensorboard_writer.close()
 

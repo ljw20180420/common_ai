@@ -14,7 +14,7 @@ import logging
 import jsonargparse
 from tbparse import SummaryReader
 import re
-from .utils import instantiate_model, get_latest_event_file
+from .utils import instantiate_model
 
 from .logger import get_logger
 from .generator import MyGenerator
@@ -371,13 +371,9 @@ class MyTrain:
 
         logger.info("open tensorboard writer")
         logdir = logs_path / "train"
-        latest_event_file = get_latest_event_file(logdir)
-        assert latest_event_file is not None, "cannot find train log"
-        logger.warning(
-            f"Find train log at {logdir.as_posix()}, load its content and delete it."
-        )
-        df = SummaryReader(latest_event_file.as_posix(), pivot=True).scalars
-        shutil.rmtree(logdir)
+        assert os.path.exists(logdir) and len(os.listdir(logdir)) > 0, "no train log"
+        assert len(os.listdir(logdir)) == 1, "find more than one train log"
+        df = SummaryReader(logdir.as_posix(), pivot=True).scalars
 
         logger.info("eval loop")
         for epoch in tqdm(range(self.last_epoch + 1, self.num_epochs)):
@@ -449,6 +445,8 @@ class MyTrain:
             yield epoch, logdir
 
         logger.info("save tensorboard log")
+        logger.warning(f"Overwrite train log at {logdir.as_posix()}.")
+        os.rename(logdir, f"{logdir.as_posix()}.bak")
         tensorboard_writer = SummaryWriter(logdir)
         for tag in df.columns:
             if tag == "step":
@@ -456,3 +454,4 @@ class MyTrain:
             for epoch, scalar_value in zip(df["step"], df[tag]):
                 tensorboard_writer.add_scalar(tag, scalar_value, global_step=epoch)
         tensorboard_writer.close()
+        shutil.rmtree(f"{logdir.as_posix()}.bak")
