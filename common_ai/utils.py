@@ -6,15 +6,32 @@ import datasets
 import importlib
 import jsonargparse
 from tbparse import SummaryReader
+from .model import MyModelAbstract
 
 
-def instantiate_model(cfg: jsonargparse.Namespace) -> tuple:
+def instantiate_model(cfg: jsonargparse.Namespace) -> MyModelAbstract:
     model_module, model_cls = cfg.model.class_path.rsplit(".", 1)
-    _, preprocess, _ = model_module.rsplit(".", 2)
     model = getattr(importlib.import_module(model_module), model_cls)(
         **cfg.model.init_args.as_dict(),
     )
 
+    return model
+
+
+def instantiate_metrics(cfg: jsonargparse.Namespace) -> dict:
+    metrics = {}
+    for metric in cfg.metric:
+        metric_module, metric_cls = metric.class_path.rsplit(".", 1)
+        metrics[metric_cls] = getattr(
+            importlib.import_module(metric_module), metric_cls
+        )(**metric.init_args.as_dict())
+
+    return metrics
+
+
+def get_save_path(cfg: jsonargparse.Namespace) -> tuple[pathlib.Path]:
+    model_module, model_cls = cfg.model.class_path.rsplit(".", 1)
+    _, preprocess, _ = model_module.rsplit(".", 2)
     output_dir = pathlib.Path(os.fspath(cfg.train.output_dir))
     checkpoints_path = (
         output_dir
@@ -33,7 +50,7 @@ def instantiate_model(cfg: jsonargparse.Namespace) -> tuple:
         / cfg.train.trial_name
     )
 
-    return model, checkpoints_path, logs_path
+    return checkpoints_path, logs_path
 
 
 def target_to_epoch(logs_path: os.PathLike, target: str) -> int:
