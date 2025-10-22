@@ -1,6 +1,11 @@
+matplotlib
+plotnine
+
 transformers
 jsonargparse[all]
 opt_einsum
 einops
 tbparse
 optuna
+
+HolisticTraceAnalysis
