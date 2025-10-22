@@ -1,4 +1,4 @@
-import time
+import pandas as pd
 import torch
 from torch import nn
 import os
@@ -14,7 +14,7 @@ import logging
 import jsonargparse
 from tbparse import SummaryReader
 import re
-from .utils import instantiate_model
+from .utils import instantiate_model, instantiate_metrics, get_save_path, save_profile
 
 from .logger import get_logger
 from .generator import MyGenerator
@@ -68,42 +68,83 @@ class MyTrain:
         cfg = train_parser.parse_args(train_parser.args)
         logger = get_logger(**cfg.logger.as_dict())
 
-        logger.info("instantiate model and random generator")
-        model, checkpoints_path, logs_path = instantiate_model(cfg)
-        my_generator = MyGenerator(**cfg.generator.as_dict())
-
-        logger.info("instantiate metrics")
-        metrics = {}
-        for metric in cfg.metric:
-            metric_module, metric_cls = metric.class_path.rsplit(".", 1)
-            metrics[metric_cls] = getattr(
-                importlib.import_module(metric_module), metric_cls
-            )(**metric.init_args.as_dict())
-
-        if not self.evaluation_only:
-            for epoch, logdir in self.my_train_model(
-                train_parser,
-                cfg,
-                model,
-                checkpoints_path,
-                logs_path,
-                my_generator,
-                metrics,
-                logger,
-            ):
-                yield epoch, logdir
+        logger.info("open tensorboard writer")
+        checkpoints_path, logs_path = get_save_path(cfg)
+        if os.path.exists(logs_path / "train"):
+            if os.path.exists(logs_path / "train.bak"):
+                shutil.rmtree(logs_path / "train.bak")
+            os.rename(logs_path / "train", logs_path / "train.bak")
+        if self.evaluation_only:
+            assert os.path.exists(logs_path / "train.bak"), "no train log"
+            logger.info("read logging directory")
+            tbdf = SummaryReader(os.fspath(logs_path / "train.bak"), pivot=True).scalars
         else:
-            for epoch, logdir in self.my_eval_model(
-                train_parser,
-                cfg,
-                model,
-                checkpoints_path,
-                logs_path,
-                my_generator,
-                metrics,
-                logger,
-            ):
-                yield epoch, logdir
+            if os.path.exists(logs_path / "profile"):
+                if os.path.exists(logs_path / "profile.bak"):
+                    shutil.rmtree(logs_path / "profile.bak")
+                os.rename(logs_path / "profile", logs_path / "profile.bak")
+        tensorboard_writer = SummaryWriter(logs_path / "train")
+
+        try:
+            if not self.evaluation_only:
+                # start profile
+                with torch.profiler.profile(
+                    activities=[
+                        torch.profiler.ProfilerActivity.CPU,
+                        torch.profiler.ProfilerActivity.CUDA,
+                    ],
+                    # schedule=torch.profiler.schedule(wait=0, warmup=0, active=1),
+                    on_trace_ready=torch.profiler.tensorboard_trace_handler(
+                        logs_path / "profile" / "time", use_gzip=True
+                    ),
+                    profile_memory=True,
+                    record_shapes=True,
+                    with_stack=True,
+                ) as prof:
+                    for epoch in self.my_train_model(
+                        train_parser,
+                        cfg,
+                        checkpoints_path,
+                        logger,
+                        tensorboard_writer,
+                    ):
+                        yield epoch
+
+                os.makedirs(logs_path / "profile" / "memory", exist_ok=True)
+                prof.export_memory_timeline(
+                    (logs_path / "profile" / "memory" / "cpu.json.gz").as_posix(),
+                    device="cpu",
+                )
+                prof.export_memory_timeline(
+                    (logs_path / "profile" / "memory" / "cuda:0.json.gz").as_posix(),
+                    device="cuda:0",
+                )
+            else:
+                for epoch in self.my_eval_model(
+                    train_parser,
+                    cfg,
+                    checkpoints_path,
+                    logger,
+                    tensorboard_writer,
+                    tbdf,
+                ):
+                    yield epoch
+
+            logger.info("close tensorboard writer")
+            tensorboard_writer.close()
+            for pn in ["train", "profile"]:
+                if os.path.exists(logs_path / f"{pn}.bak"):
+                    shutil.rmtree(logs_path / f"{pn}.bak")
+        except Exception as err:
+            logger.info("close tensorboard writer")
+            tensorboard_writer.close()
+            for pn in ["train", "profile"]:
+                if os.path.exists(logs_path / f"{pn}.bak"):
+                    if os.path.exists(logs_path / pn):
+                        shutil.rmtree(logs_path / pn)
+                    os.rename(logs_path / f"{pn}.bak", logs_path / pn)
+
+            raise err
 
     def my_train_epoch(
         self,
@@ -193,93 +234,97 @@ class MyTrain:
         self,
         train_parser: jsonargparse.ArgumentParser,
         cfg: jsonargparse.Namespace,
-        model: object,
         checkpoints_path: os.PathLike,
-        logs_path: os.PathLike,
-        my_generator: MyGenerator,
-        metrics: dict,
         logger: logging.Logger,
+        tensorboard_writer: SummaryWriter,
     ) -> Generator:
-        checkpoints_path = pathlib.Path(os.fspath(checkpoints_path))
-        logs_path = pathlib.Path(os.fspath(logs_path))
+        with torch.profiler.record_function("inst_model"):
+            logger.info("instantiate model")
+            model = instantiate_model(cfg)
+            my_generator = MyGenerator(**cfg.generator.as_dict())
+            metrics = instantiate_metrics(cfg)
+            my_optimizer = MyOptimizer(**cfg.optimizer.as_dict())
+            my_lr_scheduler = MyLrScheduler(**cfg.lr_scheduler.as_dict())
+            my_early_stopping = MyEarlyStopping(**cfg.early_stopping.as_dict())
 
-        if self.last_epoch >= 0:
-            logger.info("load checkpoint for model and random generator")
-            checkpoint = torch.load(
-                checkpoints_path / f"checkpoint-{self.last_epoch}" / "checkpoint.pt",
-                weights_only=False,
-            )
-            model.load_state_dict(checkpoint["model"])
-            my_generator.load_state_dict(checkpoint["generator"])
-        else:
-            logger.info("initialize model weights")
-            my_initializer = MyInitializer(**cfg.initializer.as_dict())
-            if hasattr(model, "my_initialize_model"):
-                model.my_initialize_model(my_initializer, my_generator)
-            else:
-                my_initializer(model, my_generator)
-
-        # Move model to the device before setup optimizer because some optimizers like Adagrad use device information.
-        logger.info("set model device")
-        setattr(model, "device", self.device)
-        if isinstance(model, nn.Module):
-            model = model.to(self.device)
-
-        logger.info("instantiate optimizer and lr scheduler")
-        my_optimizer = MyOptimizer(**cfg.optimizer.as_dict())
-        my_lr_scheduler = MyLrScheduler(**cfg.lr_scheduler.as_dict())
-
-        if isinstance(model, nn.Module):
+        with torch.profiler.record_function("init_model"):
+            checkpoints_path = pathlib.Path(os.fspath(checkpoints_path))
             if self.last_epoch >= 0:
-                logger.info("load checkpoint for optimizer and lr scheduler")
-                my_optimizer.load_state_dict(checkpoint["optimizer"])
-                my_lr_scheduler.load_state_dict(checkpoint["lr_scheduler"])
+                logger.info("load checkpoint for model and random generator")
+                checkpoint = torch.load(
+                    checkpoints_path
+                    / f"checkpoint-{self.last_epoch}"
+                    / "checkpoint.pt",
+                    weights_only=False,
+                )
+                model.load_state_dict(checkpoint["model"])
+                my_generator.load_state_dict(checkpoint["generator"])
+                if isinstance(model, nn.Module):
+                    my_optimizer.load_state_dict(checkpoint["optimizer"])
+                    my_lr_scheduler.load_state_dict(checkpoint["lr_scheduler"])
+            else:
+                logger.info("initialize model weights")
+                my_initializer = MyInitializer(**cfg.initializer.as_dict())
+                if hasattr(model, "my_initialize_model"):
+                    model.my_initialize_model(my_initializer, my_generator)
+                else:
+                    my_initializer(model, my_generator)
 
-            logger.info("setup optimizer and lr_scheduler")
-            my_optimizer(model)
-            my_lr_scheduler(my_optimizer)
+        with torch.profiler.record_function("setup_model"):
+            # Move model to the device before setup optimizer because some optimizers like Adagrad use device information.
+            logger.info("set model device")
+            setattr(model, "device", self.device)
+            if isinstance(model, nn.Module):
+                model = model.to(self.device)
+                logger.info("setup optimizer and lr_scheduler")
+                my_optimizer(model)
+                my_lr_scheduler(my_optimizer)
 
-        logger.info("setup data loader")
-        dataset_module, dataset_cls = cfg.dataset.class_path.rsplit(".", 1)
-        dataset = getattr(importlib.import_module(dataset_module), dataset_cls)(
-            **cfg.dataset.init_args.as_dict()
-        )()
-        train_dataloader = torch.utils.data.DataLoader(
-            dataset=dataset["train"],
-            batch_size=self.batch_size,
-            collate_fn=lambda examples: examples,
-            shuffle=True,
-            generator=my_generator.torch_c_rng,
-        )
-        eval_dataloader = torch.utils.data.DataLoader(
-            dataset=dataset["validation"],
-            batch_size=self.batch_size,
-            collate_fn=lambda examples: examples,
-        )
-
-        logger.info("instantiate early stopping")
-        my_early_stopping = MyEarlyStopping(**cfg.early_stopping.as_dict())
-
-        logger.info("open tensorboard writer")
-        logdir = logs_path / "train"
-        if os.path.exists(logdir):
-            logger.warning(f"{os.fspath(logdir)} already exits, delete it.")
-            shutil.rmtree(logdir)
-        tensorboard_writer = SummaryWriter(logdir)
+        with torch.profiler.record_function("setup_data_loader"):
+            logger.info("setup data loader")
+            dataset_module, dataset_cls = cfg.dataset.class_path.rsplit(".", 1)
+            dataset = getattr(importlib.import_module(dataset_module), dataset_cls)(
+                **cfg.dataset.init_args.as_dict()
+            )()
+            train_dataloader = torch.utils.data.DataLoader(
+                dataset=dataset["train"],
+                batch_size=self.batch_size,
+                collate_fn=lambda examples: examples,
+                shuffle=True,
+                generator=my_generator.torch_c_rng,
+            )
+            eval_dataloader = torch.utils.data.DataLoader(
+                dataset=dataset["validation"],
+                batch_size=self.batch_size,
+                collate_fn=lambda examples: examples,
+            )
 
         logger.info("train loop")
         for epoch in tqdm(range(self.last_epoch + 1, self.num_epochs)):
-            epoch_start_time = time.time()
+            with torch.profiler.record_function("train_loop"):
+                logger.info(f"train epoch {epoch}")
+                if hasattr(model, "my_train_epoch"):
+                    train_loss, train_loss_num, grad_norm = model.my_train_epoch(
+                        self,
+                        train_dataloader,
+                        eval_dataloader,
+                        my_generator,
+                        my_optimizer,
+                    )
+                else:
+                    train_loss, train_loss_num, grad_norm = self.my_train_epoch(
+                        model, train_dataloader, my_generator, my_optimizer
+                    )
 
-            logger.info(f"train epoch {epoch}")
-            if hasattr(model, "my_train_epoch"):
-                train_loss, train_loss_num, grad_norm = model.my_train_epoch(
-                    self, train_dataloader, eval_dataloader, my_generator, my_optimizer
-                )
-            else:
-                train_loss, train_loss_num, grad_norm = self.my_train_epoch(
-                    model, train_dataloader, my_generator, my_optimizer
-                )
+                logger.info(f"eval epoch {epoch}")
+                if hasattr(model, "my_eval_epoch"):
+                    eval_loss, eval_loss_num, metric_loss_dict = model.my_eval_epoch(
+                        self, eval_dataloader, my_generator, metrics
+                    )
+                else:
+                    eval_loss, eval_loss_num, metric_loss_dict = self.my_eval_epoch(
+                        model, eval_dataloader, my_generator, metrics
+                    )
 
             tensorboard_writer.add_scalar("train/loss", train_loss, epoch)
             tensorboard_writer.add_scalar("train/loss_num", train_loss_num, epoch)
@@ -287,16 +332,6 @@ class MyTrain:
                 "train/mean_loss", train_loss / train_loss_num, epoch
             )
             tensorboard_writer.add_scalar("train/grad_norm", grad_norm, epoch)
-
-            logger.info(f"eval epoch {epoch}")
-            if hasattr(model, "my_eval_epoch"):
-                eval_loss, eval_loss_num, metric_loss_dict = model.my_eval_epoch(
-                    self, eval_dataloader, my_generator, metrics
-                )
-            else:
-                eval_loss, eval_loss_num, metric_loss_dict = self.my_eval_epoch(
-                    model, eval_dataloader, my_generator, metrics
-                )
 
             tensorboard_writer.add_scalar("eval/loss", eval_loss, epoch)
             tensorboard_writer.add_scalar("eval/loss_num", eval_loss_num, epoch)
@@ -308,10 +343,15 @@ class MyTrain:
 
             if isinstance(model, nn.Module):
                 tensorboard_writer.add_scalar(
-                    "learning rate", my_lr_scheduler.get_last_lr()[0], epoch
+                    "train/learning_rate",
+                    my_lr_scheduler.get_last_lr()[0],
+                    epoch,
                 )
-                logger.info(f"update learning rate for {epoch}")
+                logger.info(f"update learning rate for epoch {epoch}")
                 my_lr_scheduler.step(eval_loss / eval_loss_num)
+
+            logger.info(f"flush tensorboard log for epoch {epoch}")
+            tensorboard_writer.flush()
 
             logger.info(f"save epoch {epoch}")
             os.makedirs(checkpoints_path / f"checkpoint-{epoch}", exist_ok=True)
@@ -340,42 +380,28 @@ class MyTrain:
                 f=checkpoints_path / f"checkpoint-{epoch}" / "checkpoint.pt",
             )
 
-            tensorboard_writer.add_scalar(
-                "epoch_time", time.time() - epoch_start_time, epoch
-            )
-            logger.info(f"flush tensorboard log for epoch {epoch}")
-            tensorboard_writer.flush()
-
-            yield epoch, logdir
+            yield epoch
 
             if my_early_stopping(eval_loss / eval_loss_num):
                 logger.info(f"Early stop at epoch {epoch}")
                 break
 
-        logger.info("close tensorboard_writer")
-        tensorboard_writer.close()
-
     def my_eval_model(
         self,
         train_parser: jsonargparse.ArgumentParser,
         cfg: jsonargparse.Namespace,
-        model: object,
         checkpoints_path: os.PathLike,
-        logs_path: os.PathLike,
-        my_generator: MyGenerator,
-        metrics: dict,
         logger: logging.Logger,
+        tensorboard_writer: SummaryWriter,
+        tbdf: pd.DataFrame,
     ) -> Generator:
-        checkpoints_path = pathlib.Path(os.fspath(checkpoints_path))
-        logs_path = pathlib.Path(os.fspath(logs_path))
-
-        logger.info("open tensorboard writer")
-        logdir = logs_path / "train"
-        assert os.path.exists(logdir) and len(os.listdir(logdir)) > 0, "no train log"
-        assert len(os.listdir(logdir)) == 1, "find more than one train log"
-        df = SummaryReader(os.fspath(logdir), pivot=True).scalars
+        logger.info("instantiate model")
+        model = instantiate_model(cfg)
+        my_generator = MyGenerator(**cfg.generator.as_dict())
+        metrics = instantiate_metrics(cfg)
 
         logger.info("eval loop")
+        checkpoints_path = pathlib.Path(os.fspath(checkpoints_path))
         for epoch in tqdm(range(self.last_epoch + 1, self.num_epochs)):
             logger.info("check config consistency")
             cfg_train = train_parser.parse_path(
@@ -428,11 +454,13 @@ class MyTrain:
                     model, eval_dataloader, my_generator, metrics
                 )
 
-            df.loc[df["step"] == epoch, f"eval/loss"] = eval_loss
-            df.loc[df["step"] == epoch, f"eval/loss_num"] = eval_loss_num
-            df.loc[df["step"] == epoch, f"eval/mean_loss"] = eval_loss / eval_loss_num
+            tbdf.loc[tbdf["step"] == epoch, f"eval/loss"] = eval_loss
+            tbdf.loc[tbdf["step"] == epoch, f"eval/loss_num"] = eval_loss_num
+            tbdf.loc[tbdf["step"] == epoch, f"eval/mean_loss"] = (
+                eval_loss / eval_loss_num
+            )
             for metric_name, metric_val in metric_loss_dict.items():
-                df.loc[df["step"] == epoch, f"eval/{metric_name}"] = metric_val
+                tbdf.loc[tbdf["step"] == epoch, f"eval/{metric_name}"] = metric_val
 
             logger.info(f"update config for epoch {epoch}")
             cfg.train.last_epoch = epoch
@@ -442,16 +470,11 @@ class MyTrain:
                 overwrite=True,
             )
 
-            yield epoch, logdir
+            yield epoch
 
         logger.info("save tensorboard log")
-        logger.warning(f"Overwrite train log at {os.fspath(logdir)}.")
-        os.rename(logdir, f"{os.fspath(logdir)}.bak")
-        tensorboard_writer = SummaryWriter(logdir)
-        for tag in df.columns:
+        for tag in tbdf.columns:
             if tag == "step":
                 continue
-            for epoch, scalar_value in zip(df["step"], df[tag]):
+            for epoch, scalar_value in zip(tbdf["step"], tbdf[tag]):
                 tensorboard_writer.add_scalar(tag, scalar_value, global_step=epoch)
-        tensorboard_writer.close()
-        shutil.rmtree(f"{os.fspath(logdir)}.bak")
