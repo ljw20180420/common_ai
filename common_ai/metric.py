@@ -18,5 +18,10 @@ class MyMetricAbstract(ABC):
 
     @classmethod
     @abstractmethod
-    def hpo(cls, trial: optuna.Trial, cfg: jsonargparse.Namespace):
+    def hpo(cls):
         pass
+
+    # @classmethod
+    # @abstractmethod
+    # def hpo(cls, trial: optuna.Trial, cfg: jsonargparse.Namespace):
+    #     pass
