@@ -6,10 +6,9 @@ import torch
 from torch import nn
 from torch.utils.data import DataLoader
 from torch.utils.tensorboard import SummaryWriter
-from typing import Literal
 import importlib
 import jsonargparse
-from .utils import instantiate_model, target_to_epoch
+from .utils import instantiate_model, instantiate_metrics, target_to_epoch
 from .logger import get_logger
 from .generator import MyGenerator
 
@@ -37,7 +36,7 @@ class MyTest:
     def __call__(
         self,
         train_parser: jsonargparse.ArgumentParser,
-    ) -> tuple[int, pathlib.Path]:
+    ) -> int:
         best_epoch = target_to_epoch(self.logs_path, target=self.target)
         cfg = train_parser.parse_path(
             self.checkpoints_path / f"checkpoint-{best_epoch}" / "train.yaml"
@@ -45,16 +44,11 @@ class MyTest:
         logger = get_logger(**cfg.logger.as_dict())
 
         logger.info("instantiate model and random generator")
-        model, _, _ = instantiate_model(cfg)
+        model = instantiate_model(cfg)
         my_generator = MyGenerator(**cfg.generator.as_dict())
 
         logger.info("instantiate metrics")
-        metrics = {}
-        for metric in cfg.metric:
-            metric_module, metric_cls = metric.class_path.rsplit(".", 1)
-            metrics[metric_cls] = getattr(
-                importlib.import_module(metric_module), metric_cls
-            )(**metric.init_args.as_dict())
+        metrics = instantiate_metrics(cfg)
 
         logger.info("load checkpoint for model and random generator")
         checkpoint = torch.load(
@@ -95,24 +89,42 @@ class MyTest:
                 )
 
         logger.info("save metrics")
-        logdir = self.logs_path / "test" / self.target
-        if os.path.exists(logdir):
-            logger.warning(f"{os.fspath(logdir)} already exits, delete it.")
-            shutil.rmtree(logdir)
-        tensorboard_writer = SummaryWriter(logdir)
-        _, preprocess, _, model_cls = cfg.model.class_path.rsplit(".", 3)
-        tensorboard_writer.add_hparams(
-            hparam_dict={
-                "preprocess": preprocess,
-                "model_cls": model_cls,
-                "target": self.target,
-            },
-            metric_dict={
-                f"test/{metric_cls}": metric_inst.epoch()
-                for metric_cls, metric_inst in metrics.items()
-            },
-            global_step=best_epoch,
-        )
-        tensorboard_writer.close()
+        if os.path.exists(self.logs_path / "test" / self.target):
+            if os.path.exists(self.logs_path / "test" / f"{self.target}.bak"):
+                shutil.rmtree(self.logs_path / "test" / f"{self.target}.bak")
+            os.rename(
+                self.logs_path / "test" / self.target,
+                self.logs_path / "test" / f"{self.target}.bak",
+            )
 
-        return best_epoch, logdir
+        try:
+            tensorboard_writer = SummaryWriter(self.logs_path / "test" / self.target)
+            _, preprocess, _, model_cls = cfg.model.class_path.rsplit(".", 3)
+            tensorboard_writer.add_hparams(
+                hparam_dict={
+                    "preprocess": preprocess,
+                    "model_cls": model_cls,
+                    "target": self.target,
+                },
+                metric_dict={
+                    f"test/{metric_cls}": metric_inst.epoch()
+                    for metric_cls, metric_inst in metrics.items()
+                },
+                global_step=best_epoch,
+            )
+            tensorboard_writer.close()
+            if os.path.exists(self.logs_path / "test" / f"{self.target}.bak"):
+                shutil.rmtree(self.logs_path / "test" / f"{self.target}.bak")
+        except Exception as err:
+            tensorboard_writer.close()
+            if os.path.exists(self.logs_path / "test" / f"{self.target}.bak"):
+                if os.path.exists(self.logs_path / "test" / self.target):
+                    shutil.rmtree(self.logs_path / "test" / self.target)
+                os.rename(
+                    self.logs_path / "test" / f"{self.target}.bak",
+                    self.logs_path / "test" / self.target,
+                )
+
+            raise err
+
+        return best_epoch
