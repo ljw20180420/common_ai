@@ -22,6 +22,7 @@ from .initializer import MyInitializer
 from .optimizer import MyOptimizer
 from .lr_scheduler import MyLrScheduler
 from .early_stopping import MyEarlyStopping
+from .profiler import MyProfiler
 
 
 class MyTrain:
@@ -88,37 +89,19 @@ class MyTrain:
         try:
             if not self.evaluation_only:
                 # start profile
-                with torch.profiler.profile(
-                    activities=[
-                        torch.profiler.ProfilerActivity.CPU,
-                        torch.profiler.ProfilerActivity.CUDA,
-                    ],
-                    # schedule=torch.profiler.schedule(wait=0, warmup=0, active=1),
-                    on_trace_ready=torch.profiler.tensorboard_trace_handler(
-                        logs_path / "profile" / "time", use_gzip=True
-                    ),
-                    profile_memory=True,
-                    record_shapes=True,
-                    with_stack=True,
-                ) as prof:
-                    for epoch in self.my_train_model(
-                        train_parser,
-                        cfg,
-                        checkpoints_path,
-                        logger,
-                        tensorboard_writer,
-                    ):
-                        yield epoch
+                my_profiler = MyProfiler(**cfg.profiler)
+                my_profiler.start(logs_path)
+                for epoch in self.my_train_model(
+                    train_parser,
+                    cfg,
+                    checkpoints_path,
+                    logger,
+                    tensorboard_writer,
+                    my_profiler,
+                ):
+                    yield epoch
 
-                os.makedirs(logs_path / "profile" / "memory", exist_ok=True)
-                prof.export_memory_timeline(
-                    (logs_path / "profile" / "memory" / "cpu.json.gz").as_posix(),
-                    device="cpu",
-                )
-                prof.export_memory_timeline(
-                    (logs_path / "profile" / "memory" / "cuda:0.json.gz").as_posix(),
-                    device="cuda:0",
-                )
+                my_profiler.stop()
             else:
                 for epoch in self.my_eval_model(
                     train_parser,
@@ -237,69 +220,65 @@ class MyTrain:
         checkpoints_path: os.PathLike,
         logger: logging.Logger,
         tensorboard_writer: SummaryWriter,
+        my_profiler: MyProfiler,
     ) -> Generator:
-        with torch.profiler.record_function("inst_model"):
-            logger.info("instantiate model")
-            model = instantiate_model(cfg)
-            my_generator = MyGenerator(**cfg.generator.as_dict())
-            metrics = instantiate_metrics(cfg)
-            my_optimizer = MyOptimizer(**cfg.optimizer.as_dict())
-            my_lr_scheduler = MyLrScheduler(**cfg.lr_scheduler.as_dict())
-            my_early_stopping = MyEarlyStopping(**cfg.early_stopping.as_dict())
+        logger.info("instantiate model")
+        model = instantiate_model(cfg)
+        my_generator = MyGenerator(**cfg.generator.as_dict())
+        metrics = instantiate_metrics(cfg)
+        my_optimizer = MyOptimizer(**cfg.optimizer.as_dict())
+        my_lr_scheduler = MyLrScheduler(**cfg.lr_scheduler.as_dict())
+        my_early_stopping = MyEarlyStopping(**cfg.early_stopping.as_dict())
 
-        with torch.profiler.record_function("init_model"):
-            checkpoints_path = pathlib.Path(os.fspath(checkpoints_path))
-            if self.last_epoch >= 0:
-                logger.info("load checkpoint for model and random generator")
-                checkpoint = torch.load(
-                    checkpoints_path
-                    / f"checkpoint-{self.last_epoch}"
-                    / "checkpoint.pt",
-                    weights_only=False,
-                )
-                model.load_state_dict(checkpoint["model"])
-                my_generator.load_state_dict(checkpoint["generator"])
-                if isinstance(model, nn.Module):
-                    my_optimizer.load_state_dict(checkpoint["optimizer"])
-                    my_lr_scheduler.load_state_dict(checkpoint["lr_scheduler"])
-            else:
-                logger.info("initialize model weights")
-                my_initializer = MyInitializer(**cfg.initializer.as_dict())
-                if hasattr(model, "my_initialize_model"):
-                    model.my_initialize_model(my_initializer, my_generator)
-                else:
-                    my_initializer(model, my_generator)
-
-        with torch.profiler.record_function("setup_model"):
-            # Move model to the device before setup optimizer because some optimizers like Adagrad use device information.
-            logger.info("set model device")
-            setattr(model, "device", self.device)
+        checkpoints_path = pathlib.Path(os.fspath(checkpoints_path))
+        if self.last_epoch >= 0:
+            logger.info("load checkpoint for model and random generator")
+            checkpoint = torch.load(
+                checkpoints_path / f"checkpoint-{self.last_epoch}" / "checkpoint.pt",
+                weights_only=False,
+            )
+            model.load_state_dict(checkpoint["model"])
+            my_generator.load_state_dict(checkpoint["generator"])
             if isinstance(model, nn.Module):
-                model = model.to(self.device)
-                logger.info("setup optimizer and lr_scheduler")
-                my_optimizer(model)
-                my_lr_scheduler(my_optimizer)
+                my_optimizer.load_state_dict(checkpoint["optimizer"])
+                my_lr_scheduler.load_state_dict(checkpoint["lr_scheduler"])
+        else:
+            logger.info("initialize model weights")
+            my_initializer = MyInitializer(**cfg.initializer.as_dict())
+            if hasattr(model, "my_initialize_model"):
+                model.my_initialize_model(my_initializer, my_generator)
+            else:
+                my_initializer(model, my_generator)
 
-        with torch.profiler.record_function("setup_data_loader"):
-            logger.info("setup data loader")
-            dataset_module, dataset_cls = cfg.dataset.class_path.rsplit(".", 1)
-            dataset = getattr(importlib.import_module(dataset_module), dataset_cls)(
-                **cfg.dataset.init_args.as_dict()
-            )()
-            train_dataloader = torch.utils.data.DataLoader(
-                dataset=dataset["train"],
-                batch_size=self.batch_size,
-                collate_fn=lambda examples: examples,
-                shuffle=True,
-                generator=my_generator.torch_c_rng,
-            )
-            eval_dataloader = torch.utils.data.DataLoader(
-                dataset=dataset["validation"],
-                batch_size=self.batch_size,
-                collate_fn=lambda examples: examples,
-            )
+        # Move model to the device before setup optimizer because some optimizers like Adagrad use device information.
+        logger.info("set model device")
+        setattr(model, "device", self.device)
+        if isinstance(model, nn.Module):
+            model = model.to(self.device)
+            logger.info("setup optimizer and lr_scheduler")
+            my_optimizer(model)
+            my_lr_scheduler(my_optimizer)
+
+        logger.info("setup data loader")
+        dataset_module, dataset_cls = cfg.dataset.class_path.rsplit(".", 1)
+        dataset = getattr(importlib.import_module(dataset_module), dataset_cls)(
+            **cfg.dataset.init_args.as_dict()
+        )()
+        train_dataloader = torch.utils.data.DataLoader(
+            dataset=dataset["train"],
+            batch_size=self.batch_size,
+            collate_fn=lambda examples: examples,
+            shuffle=True,
+            generator=my_generator.torch_c_rng,
+        )
+        eval_dataloader = torch.utils.data.DataLoader(
+            dataset=dataset["validation"],
+            batch_size=self.batch_size,
+            collate_fn=lambda examples: examples,
+        )
 
         logger.info("train loop")
+        my_profiler.step()
         for epoch in tqdm(range(self.last_epoch + 1, self.num_epochs)):
             with torch.profiler.record_function("train_loop"):
                 logger.info(f"train epoch {epoch}")
@@ -325,6 +304,8 @@ class MyTrain:
                     eval_loss, eval_loss_num, metric_loss_dict = self.my_eval_epoch(
                         model, eval_dataloader, my_generator, metrics
                     )
+
+            my_profiler.step()
 
             tensorboard_writer.add_scalar("train/loss", train_loss, epoch)
             tensorboard_writer.add_scalar("train/loss_num", train_loss_num, epoch)

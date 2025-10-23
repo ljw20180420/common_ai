@@ -20,3 +20,5 @@ optimizer: component/optimizer.yaml
 lr_scheduler: component/lr_scheduler.yaml
 
 early_stopping: component/early_stopping.yaml
+
+profiler: component/profiler.yaml

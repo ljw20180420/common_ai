@@ -1,6 +1,7 @@
 import jsonargparse
 from .train import MyTrain
 from .test import MyTest
+from .hta import MyHta
 from .hpo import MyHpo
 from .logger import get_logger
 from .generator import MyGenerator
@@ -8,12 +9,13 @@ from .initializer import MyInitializer
 from .optimizer import MyOptimizer
 from .lr_scheduler import MyLrScheduler
 from .early_stopping import MyEarlyStopping
+from .profiler import MyProfiler
 from .dataset import MyDatasetAbstract
 from .metric import MyMetricAbstract
 from .model import MyModelAbstract
 
 
-def get_train_parser():
+def get_train_parser() -> jsonargparse.ArgumentParser:
     train_parser = jsonargparse.ArgumentParser(description="Train AI models.")
     train_parser.add_argument("--config", action="config")
     train_parser.add_class_arguments(theclass=MyTrain, nested_key="train")
@@ -42,6 +44,10 @@ def get_train_parser():
         theclass=MyEarlyStopping,
         nested_key="early_stopping",
     )
+    train_parser.add_class_arguments(
+        theclass=MyProfiler,
+        nested_key="profiler",
+    )
     train_parser.add_subclass_arguments(
         baseclass=MyDatasetAbstract,
         nested_key="dataset",
@@ -61,7 +67,7 @@ def get_train_parser():
     return train_parser
 
 
-def get_test_parser():
+def get_test_parser() -> jsonargparse.ArgumentParser:
     test_parser = jsonargparse.ArgumentParser(description="Test AI models.")
     test_parser.add_argument("--config", action="config")
     test_parser.add_class_arguments(theclass=MyTest, nested_key=None)
@@ -69,7 +75,15 @@ def get_test_parser():
     return test_parser
 
 
-def get_hpo_parser():
+def get_hta_parser() -> jsonargparse.ArgumentParser:
+    hta_parser = jsonargparse.ArgumentParser(description="Hta AI models.")
+    hta_parser.add_argument("--config", action="config")
+    hta_parser.add_class_arguments(theclass=MyHta, nested_key=None)
+
+    return hta_parser
+
+
+def get_hpo_parser() -> jsonargparse.ArgumentParser:
     hpo_parser = jsonargparse.ArgumentParser(description="Hpo AI models.")
     hpo_parser.add_argument("--config", action="config")
     hpo_parser.add_class_arguments(theclass=MyHpo, nested_key="hpo")
@@ -92,7 +106,10 @@ def get_config() -> tuple[jsonargparse.ArgumentParser]:
     test_parser = get_test_parser()
     subcommands.add_subcommand(name="test", parser=test_parser)
 
+    hta_parser = get_hta_parser()
+    subcommands.add_subcommand(name="hta", parser=hta_parser)
+
     hpo_parser = get_hpo_parser()
     subcommands.add_subcommand(name="hpo", parser=hpo_parser)
 
-    return parser, train_parser, test_parser, hpo_parser
+    return parser, train_parser, test_parser, hta_parser, hpo_parser
