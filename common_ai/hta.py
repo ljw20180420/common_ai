@@ -40,21 +40,6 @@ class MyHta:
         self.export_memory_timeline("cpu")
         self.export_memory_timeline("cuda:0")
 
-    def decode_trace(self) -> None:
-        os.makedirs(self.trace_dir / "time" / "decode", exist_ok=True)
-        for trace_file in os.listdir(self.trace_dir):
-            if os.path.isfile(self.trace_dir / trace_file):
-                with gzip.open(self.trace_dir / trace_file, "rb") as fd, gzip.open(
-                    self.trace_dir / "time" / "decode" / trace_file, "wb"
-                ) as wd:
-                    _ = wd.write(
-                        re.sub(
-                            r"[\x00\x01\x02\x03\x04\x05\x06\x07\x08\x0b\x0c\x0e\x0f\x10\x11\x12\x13\x14\x15\x16\x17\x18\x19\x1a\x1b\x1c\x1d\x1e\x1f\x7f]",
-                            "sc",
-                            fd.read().decode(encoding="ascii", errors="ignore"),
-                        ).encode(encoding="ascii")
-                    )
-
     # Temporal breakdown
     def get_temporal_breakdown(self) -> None:
         os.makedirs(self.trace_dir / "time" / "output", exist_ok=True)
