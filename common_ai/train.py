@@ -14,8 +14,7 @@ import logging
 import jsonargparse
 from tbparse import SummaryReader
 import re
-from .utils import instantiate_model, instantiate_metrics, get_save_path, save_profile
-
+from .utils import instantiate_model, instantiate_metrics, get_save_path
 from .logger import get_logger
 from .generator import MyGenerator
 from .initializer import MyInitializer
@@ -88,20 +87,15 @@ class MyTrain:
 
         try:
             if not self.evaluation_only:
-                # start profile
-                my_profiler = MyProfiler(**cfg.profiler)
-                my_profiler.start(logs_path)
                 for epoch in self.my_train_model(
                     train_parser,
                     cfg,
                     checkpoints_path,
+                    logs_path,
                     logger,
                     tensorboard_writer,
-                    my_profiler,
                 ):
                     yield epoch
-
-                my_profiler.stop()
             else:
                 for epoch in self.my_eval_model(
                     train_parser,
@@ -135,6 +129,7 @@ class MyTrain:
         train_dataloader: torch.utils.data.DataLoader,
         my_generator: MyGenerator,
         my_optimizer: MyOptimizer,
+        my_profiler: MyProfiler,
     ) -> tuple[float]:
         model.train()
         model.zero_grad()  # optimizer.zero_grad() is different when multiple models share a common optimizer
@@ -143,6 +138,9 @@ class MyTrain:
             batch = model.data_collator(
                 examples, output_label=True, my_generator=my_generator
             )
+
+            my_profiler.start()
+
             result = model(
                 input=batch["input"],
                 label=batch["label"],
@@ -156,6 +154,9 @@ class MyTrain:
                 ).item()
                 my_optimizer.step()
                 model.zero_grad()
+
+            my_profiler.stop()
+
             train_loss += (
                 result["loss"].item()
                 if not isinstance(result["loss"], Number)
@@ -218,9 +219,9 @@ class MyTrain:
         train_parser: jsonargparse.ArgumentParser,
         cfg: jsonargparse.Namespace,
         checkpoints_path: os.PathLike,
+        logs_path: os.PathLike,
         logger: logging.Logger,
         tensorboard_writer: SummaryWriter,
-        my_profiler: MyProfiler,
     ) -> Generator:
         logger.info("instantiate model")
         model = instantiate_model(cfg)
@@ -229,6 +230,7 @@ class MyTrain:
         my_optimizer = MyOptimizer(**cfg.optimizer.as_dict())
         my_lr_scheduler = MyLrScheduler(**cfg.lr_scheduler.as_dict())
         my_early_stopping = MyEarlyStopping(**cfg.early_stopping.as_dict())
+        my_profiler = MyProfiler(**cfg.profiler.as_dict()).set_logs_path(logs_path)
 
         checkpoints_path = pathlib.Path(os.fspath(checkpoints_path))
         if self.last_epoch >= 0:
@@ -278,34 +280,35 @@ class MyTrain:
         )
 
         logger.info("train loop")
-        my_profiler.step()
         for epoch in tqdm(range(self.last_epoch + 1, self.num_epochs)):
-            with torch.profiler.record_function("train_loop"):
-                logger.info(f"train epoch {epoch}")
-                if hasattr(model, "my_train_epoch"):
-                    train_loss, train_loss_num, grad_norm = model.my_train_epoch(
-                        self,
-                        train_dataloader,
-                        eval_dataloader,
-                        my_generator,
-                        my_optimizer,
-                    )
-                else:
-                    train_loss, train_loss_num, grad_norm = self.my_train_epoch(
-                        model, train_dataloader, my_generator, my_optimizer
-                    )
+            logger.info(f"train epoch {epoch}")
+            if hasattr(model, "my_train_epoch"):
+                train_loss, train_loss_num, grad_norm = model.my_train_epoch(
+                    self,
+                    train_dataloader,
+                    eval_dataloader,
+                    my_generator,
+                    my_optimizer,
+                    my_profiler,
+                )
+            else:
+                train_loss, train_loss_num, grad_norm = self.my_train_epoch(
+                    model,
+                    train_dataloader,
+                    my_generator,
+                    my_optimizer,
+                    my_profiler,
+                )
 
-                logger.info(f"eval epoch {epoch}")
-                if hasattr(model, "my_eval_epoch"):
-                    eval_loss, eval_loss_num, metric_loss_dict = model.my_eval_epoch(
-                        self, eval_dataloader, my_generator, metrics
-                    )
-                else:
-                    eval_loss, eval_loss_num, metric_loss_dict = self.my_eval_epoch(
-                        model, eval_dataloader, my_generator, metrics
-                    )
-
-            my_profiler.step()
+            logger.info(f"eval epoch {epoch}")
+            if hasattr(model, "my_eval_epoch"):
+                eval_loss, eval_loss_num, metric_loss_dict = model.my_eval_epoch(
+                    self, eval_dataloader, my_generator, metrics
+                )
+            else:
+                eval_loss, eval_loss_num, metric_loss_dict = self.my_eval_epoch(
+                    model, eval_dataloader, my_generator, metrics
+                )
 
             tensorboard_writer.add_scalar("train/loss", train_loss, epoch)
             tensorboard_writer.add_scalar("train/loss_num", train_loss_num, epoch)
@@ -395,6 +398,7 @@ class MyTrain:
                     "train.evaluation_only",
                     "model.__path__",
                     "metric",
+                    "profiler.repeat",
                 ] or re.search(r"^.+\.__path__$", key):
                     continue
                 assert (

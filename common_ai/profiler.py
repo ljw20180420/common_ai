@@ -6,53 +6,49 @@ import pathlib
 class MyProfiler:
     def __init__(
         self,
-        wait: int,
         warmup: int,
         active: int,
         repeat: int,
-        skip_first: int,
-        skip_first_wait: int,
-        use_profiler: bool,
+        **kwargs,
     ) -> None:
         """Profiler arguments.
 
         Args:
-            wait: skip steps in each round.
-            warmup: warmup steps in each round.
-            active: profile steps in each round.
-            repeat: total round number, 0 means infinity rounds.
-            skip_first: additional skip steps before first round.
-            skip_first_wait: whether skip wait before first round.
-            use_profiler: whether to use profiler.
+            warmup: warmup steps in each rounds.
+            active: record steps in each rounds.
+            repeat: total rounds. 0 means infinity. negative means turn off.
         """
-        self.wait = wait
-        self.warmup = warmup
-        self.active = active
+        self.step = -1
         self.repeat = repeat
-        self.skip_first = skip_first
-        self.skip_first_wait = skip_first_wait
-        self.use_profiler = use_profiler
+        if repeat >= 0:
+            self.schedule = torch.profiler.schedule(
+                wait=0, warmup=warmup, active=active, repeat=repeat
+            )
 
-    def start(self, logs_path: os.PathLike) -> None:
-        if not self.use_profiler or hasattr(self, "prof"):
+    def set_logs_path(self, logs_path: os.PathLike) -> object:
+        self.logs_path = pathlib.Path(os.fspath(logs_path))
+        return self
+
+    def start(self) -> None:
+        if self.repeat < 0:
             return
 
-        self.logs_path = pathlib.Path(os.fspath(logs_path))
+        self.step += 1
+        if self.schedule(self.step) in [
+            torch.profiler.ProfilerAction.NONE,
+            torch.profiler.ProfilerAction.WARMUP,
+        ]:
+            return
+
         self.prof = torch.profiler.profile(
             activities=[
                 torch.profiler.ProfilerActivity.CPU,
                 torch.profiler.ProfilerActivity.CUDA,
             ],
-            schedule=torch.profiler.schedule(
-                self.wait,
-                self.warmup,
-                self.active,
-                self.repeat,
-                self.skip_first,
-                self.skip_first_wait,
-            ),
             on_trace_ready=torch.profiler.tensorboard_trace_handler(
-                self.logs_path / "profile" / "time", use_gzip=True
+                self.logs_path / "profile" / "time",
+                worker_name=f"step{self.step}",
+                use_gzip=True,
             ),
             profile_memory=True,
             record_shapes=True,
@@ -60,21 +56,27 @@ class MyProfiler:
         )
         self.prof.start()
 
-    def step(self) -> None:
-        if not self.use_profiler or hasattr(self, "prof"):
-            return
-        self.prof.step()
-
     def stop(self) -> None:
-        if not self.use_profiler or hasattr(self, "prof"):
+        if self.repeat < 0:
             return
+
+        if self.schedule(self.step) in [
+            torch.profiler.ProfilerAction.NONE,
+            torch.profiler.ProfilerAction.WARMUP,
+        ]:
+            return
+
         self.prof.stop()
         os.makedirs(self.logs_path / "profile" / "space", exist_ok=True)
         self.prof.export_memory_timeline(
-            (self.logs_path / "profile" / "space" / "cpu.json.gz").as_posix(),
+            (
+                self.logs_path / "profile" / "space" / f"cpu.{self.step}.json.gz"
+            ).as_posix(),
             device="cpu",
         )
         self.prof.export_memory_timeline(
-            (self.logs_path / "profile" / "space" / "cuda:0.json.gz").as_posix(),
+            (
+                self.logs_path / "profile" / "space" / f"cuda:0.{self.step}.json.gz"
+            ).as_posix(),
             device="cuda:0",
         )
