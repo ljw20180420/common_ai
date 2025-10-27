@@ -127,7 +127,11 @@ class Objective:
 
         self.logger.info("write train config")
         train_parser = self.get_train_parser()
-        train_parser.save(cfg, checkpoints_path / "train.yaml")
+        train_parser.save(
+            cfg,
+            checkpoints_path / "train.yaml",
+            overwrite=True,
+        )
         train_parser.args = ["--config", os.fspath(checkpoints_path / "train.yaml")]
 
         self.logger.info("write test config")
@@ -142,8 +146,8 @@ class Objective:
             )
 
         # train
-        for epoch, logdir in MyTrain(**cfg.train.as_dict())(train_parser):
-            df = SummaryReader(os.fspath(logdir), pivot=True).scalars
+        for epoch in MyTrain(**cfg.train.as_dict())(train_parser):
+            df = SummaryReader(os.fspath(logs_path / "train"), pivot=True).scalars
             trial.report(
                 value=df.loc[df["step"] == epoch, f"eval/{self.target}"].item(),
                 step=epoch,
@@ -152,12 +156,12 @@ class Objective:
                 break
 
         # test
-        epoch, logdir = MyTest(
+        epoch = MyTest(
             checkpoints_path=checkpoints_path,
             logs_path=logs_path,
             target=self.target,
         )(train_parser)
-        df = SummaryReader(os.fspath(logdir), pivot=True).scalars
+        df = SummaryReader(os.fspath(logs_path / "test"), pivot=True).scalars
         target_metric_val = df.loc[df["step"] == epoch, f"test/{self.target}"].item()
         tensorboard_writer = SummaryWriter(self.logs_parent / "hpo")
         hparam_dict = {
