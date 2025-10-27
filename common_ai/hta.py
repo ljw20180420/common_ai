@@ -13,6 +13,7 @@ from hta.trace_analysis import TraceAnalysis
 import re
 import pathlib
 import os
+import sys
 
 
 class MyHta:
@@ -51,15 +52,50 @@ class MyHta:
         if not os.path.exists(self.trace_dir):
             return
 
-        self.get_temporal_breakdown()
-        self.get_idle_time_breakdown()
-        self.get_gpu_kernel_breakdown()
-        self.get_memory_bw_time_series()
-        self.get_memory_bw_summary()
-        self.get_queue_length_time_series()
-        self.get_queue_length_summary()
-        self.get_cuda_kernel_launch_stats()
-        self.export_memory_timeline()
+        try:
+            self.get_temporal_breakdown()
+        except Exception as err:
+            sys.stderr.write(f"{err}\n")
+
+        try:
+            self.get_idle_time_breakdown()
+        except Exception as err:
+            sys.stderr.write(f"{err}\n")
+
+        try:
+            self.get_gpu_kernel_breakdown()
+        except Exception as err:
+            sys.stderr.write(f"{err}\n")
+
+        try:
+            self.get_memory_bw_time_series()
+        except Exception as err:
+            sys.stderr.write(f"{err}\n")
+
+        try:
+            self.get_memory_bw_summary()
+        except Exception as err:
+            sys.stderr.write(f"{err}\n")
+
+        try:
+            self.get_queue_length_time_series()
+        except Exception as err:
+            sys.stderr.write(f"{err}\n")
+
+        try:
+            self.get_queue_length_summary()
+        except Exception as err:
+            sys.stderr.write(f"{err}\n")
+
+        try:
+            self.get_cuda_kernel_launch_stats()
+        except Exception as err:
+            sys.stderr.write(f"{err}\n")
+
+        try:
+            self.export_memory_timeline()
+        except Exception as err:
+            sys.stderr.write(f"{err}\n")
 
     # Temporal breakdown
     def get_temporal_breakdown(self) -> None:
