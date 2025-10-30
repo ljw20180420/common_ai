@@ -5,7 +5,6 @@ import numpy as np
 import datasets
 import importlib
 import jsonargparse
-from tbparse import SummaryReader
 from .model import MyModelAbstract
 
 
@@ -51,20 +50,6 @@ def get_save_path(cfg: jsonargparse.Namespace) -> tuple[pathlib.Path]:
     )
 
     return checkpoints_path, logs_path
-
-
-def target_to_epoch(logs_path: os.PathLike, target: str) -> int:
-    """
-    Infer the epoch with the loweset metric (including loss).
-    """
-    logs_path = pathlib.Path(os.fspath(logs_path))
-    logdir = logs_path / "train"
-    assert os.path.exists(logdir) and len(os.listdir(logdir)) > 0, "no train log"
-    assert len(os.listdir(logdir)) == 1, "find more than one train log"
-    df = SummaryReader(os.fspath(logdir), pivot=True).scalars
-    epoch = df["step"].iloc[df[f"eval/{target}"].argmin()].item()
-
-    return epoch
 
 
 class Residual(nn.Module):

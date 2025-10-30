@@ -8,7 +8,8 @@ from torch.utils.data import DataLoader
 from torch.utils.tensorboard import SummaryWriter
 import importlib
 import jsonargparse
-from .utils import instantiate_model, instantiate_metrics, target_to_epoch
+from tbparse import SummaryReader
+from .utils import instantiate_model, instantiate_metrics
 from .logger import get_logger
 from .generator import MyGenerator
 
@@ -32,25 +33,25 @@ class MyTest:
         self.logs_path = pathlib.Path(os.fspath(logs_path))
         self.target = target
 
-    @torch.no_grad()
-    def __call__(
-        self,
-        train_parser: jsonargparse.ArgumentParser,
-    ) -> int:
-        best_epoch = target_to_epoch(self.logs_path, target=self.target)
+    def load_model(self, train_parser: jsonargparse.ArgumentParser) -> tuple:
+        logdir = self.logs_path / "train"
+        assert os.path.exists(logdir) and len(os.listdir(logdir)) > 0, "no train log"
+        assert len(os.listdir(logdir)) == 1, "find more than one train log"
+        df_train = SummaryReader(os.fspath(logdir), pivot=True).scalars
+        best_epoch = (
+            df_train["step"].iloc[df_train[f"eval/{self.target}"].argmin()].item()
+        )
+
         cfg = train_parser.parse_path(
             self.checkpoints_path / f"checkpoint-{best_epoch}" / "train.yaml"
         )
         logger = get_logger(**cfg.logger.as_dict())
 
-        logger.info("instantiate model and random generator")
+        logger.info("instantiate model")
         model = instantiate_model(cfg)
         my_generator = MyGenerator(**cfg.generator.as_dict())
 
-        logger.info("instantiate metrics")
-        metrics = instantiate_metrics(cfg)
-
-        logger.info("load checkpoint for model and random generator")
+        logger.info("load model checkpoint")
         checkpoint = torch.load(
             self.checkpoints_path / f"checkpoint-{best_epoch}" / "checkpoint.pt",
             weights_only=False,
@@ -63,6 +64,18 @@ class MyTest:
         if isinstance(model, nn.Module):
             model = model.to(cfg.train.device)
             model.eval()
+
+        return best_epoch, cfg, logger, model, my_generator
+
+    @torch.no_grad()
+    def __call__(
+        self,
+        train_parser: jsonargparse.ArgumentParser,
+    ) -> int:
+        best_epoch, cfg, logger, model, my_generator = self.load_model(train_parser)
+
+        logger.info("instantiate metrics")
+        metrics = instantiate_metrics(cfg)
 
         logger.info("setup data loader")
         dataset_module, dataset_cls = cfg.dataset.class_path.rsplit(".", 1)
