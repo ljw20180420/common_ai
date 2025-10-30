@@ -22,6 +22,7 @@ from .optimizer import MyOptimizer
 from .lr_scheduler import MyLrScheduler
 from .early_stopping import MyEarlyStopping
 from .profiler import MyProfiler
+from .model import MyModelAbstract
 
 
 class MyTrain:
@@ -125,7 +126,7 @@ class MyTrain:
 
     def my_train_epoch(
         self,
-        model: nn.Module,
+        model: MyModelAbstract,
         train_dataloader: torch.utils.data.DataLoader,
         my_generator: MyGenerator,
         my_optimizer: MyOptimizer,
@@ -171,7 +172,7 @@ class MyTrain:
 
     def my_eval_epoch(
         self,
-        model: object,
+        model: MyModelAbstract,
         eval_dataloader: torch.utils.data.DataLoader,
         my_generator: MyGenerator,
         metrics: dict,
