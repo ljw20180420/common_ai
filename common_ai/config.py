@@ -13,6 +13,7 @@ from .profiler import MyProfiler
 from .dataset import MyDatasetAbstract
 from .metric import MyMetricAbstract
 from .model import MyModelAbstract
+from .inference import MyInferenceAbstract
 
 
 def get_train_parser() -> jsonargparse.ArgumentParser:
@@ -75,6 +76,23 @@ def get_test_parser() -> jsonargparse.ArgumentParser:
     return test_parser
 
 
+def get_inference_parser() -> jsonargparse.ArgumentParser:
+    inference_parser = jsonargparse.ArgumentParser(description="Inference AI models.")
+    inference_parser.add_argument("--config", action="config")
+    inference_parser.add_argument("--input", required=True, type=str, help="input file")
+    inference_parser.add_argument(
+        "--output", required=True, type=str, help="output file"
+    )
+    inference_parser.add_subclass_arguments(
+        baseclass=MyInferenceAbstract, nested_key="inference"
+    )
+    inference_parser.add_argument(
+        "--test", action=jsonargparse.ActionParser(parser=get_test_parser())
+    )
+
+    return inference_parser
+
+
 def get_hta_parser() -> jsonargparse.ArgumentParser:
     hta_parser = jsonargparse.ArgumentParser(description="Hta AI models.")
     hta_parser.add_argument("--config", action="config")
@@ -106,10 +124,13 @@ def get_config() -> tuple[jsonargparse.ArgumentParser]:
     test_parser = get_test_parser()
     subcommands.add_subcommand(name="test", parser=test_parser)
 
+    inference_parser = get_inference_parser()
+    subcommands.add_subcommand(name="inference", parser=inference_parser)
+
     hta_parser = get_hta_parser()
     subcommands.add_subcommand(name="hta", parser=hta_parser)
 
     hpo_parser = get_hpo_parser()
     subcommands.add_subcommand(name="hpo", parser=hpo_parser)
 
-    return parser, train_parser, test_parser, hta_parser, hpo_parser
+    return parser, train_parser, test_parser, inference_parser, hta_parser, hpo_parser
