@@ -1,11 +1,18 @@
 matplotlib
 plotnine
 
-transformers
 jsonargparse[all]
+
+transformers
+
 opt_einsum
 einops
-tbparse
+
 optuna
 
+tbparse
+
 HolisticTraceAnalysis
+
+shap
+deeplift

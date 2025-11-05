@@ -2,8 +2,6 @@ from typing import Literal
 from torch import nn
 import torch
 from transformers.trainer_pt_utils import get_parameter_names
-import optuna
-import jsonargparse
 
 
 class MyOptimizer:
