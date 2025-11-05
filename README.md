@@ -15,10 +15,12 @@ flowchart TD
     MODE -- yes --> EVALMODEL[<code>MyTrain.my_eval_model</code>]
 
     subgraph EVALMODEL[<code>MyTrain.my_eval_model</code>]
+        direction TB
         EVALLOOP[eval loop]
     end
 
     subgraph EVALLOOP[eval loop]
+        direction TB
         CHECKCONSISTENCY[check config consistency] --> EVALLOADCHECKPOINT[load checkpoint for model and generator] --> EVALDEVICE[set model device] --> EVALDATALOADER[setup data loader] --> EVALEPOCHBRANCH{{implement <code>model.my_eval_epoch</code>?}}
         EVALEPOCHBRANCH -- yes --> CUSTOMEVAL[<code>model.my_eval_epoch</code>]
         EVALEPOCHBRANCH -- no --> COMMONEVAL[<code>MyTrain.my_eval_epoch</code>]
@@ -29,6 +31,7 @@ flowchart TD
     MODE -- no --> COMMONTRAIN[<code>MyTrain.my_train_model</code>]
 
     subgraph COMMONTRAIN[<code>MyTrain.my_train_model</code>]
+        direction TB
         CONTINUETRAIN{{last epoch is -1?}}
         CONTINUETRAIN -- yes --> HASINIT{{implement <code>model.my_initialize_model</code>?}} -- yes --> CUSTOMINIT[<code>model.my_initialize_model</code>?]
         HASINIT -- no --> INITWEIGHT[initialize model weights by <code>my_initializer</code>]
@@ -40,7 +43,9 @@ flowchart TD
         CONTINUETRAIN2{{last epoch is -1?}} -- yes --> SETUPOPSC
         SETUPOPSC --> TRAINDATALOADER[setup data loader] --> INSTEARLYSTOP[instantiate early stopping] --> TRAINLOOP[train loop]
     end
+
     subgraph TRAINLOOP[train loop]
+        direction TB
         M{{implement <code>model.my_train_epoch</code>?}}
         M -- yes --> N[<code>model.my_train_epoch</code>]
         M -- no --> O[<code>MyTrain.my_train_epoch</code>]
