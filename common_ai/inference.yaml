@@ -1,8 +1,0 @@
-# input:
-# output:
-
-inference:
-  # class_path:
-  # init_args:
-
-test: test.yaml
