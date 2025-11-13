@@ -20,6 +20,7 @@ class MyTest:
         checkpoints_path: os.PathLike,
         logs_path: os.PathLike,
         target: str,
+        overwrite: dict,
         **kwargs,
     ) -> None:
         """Test arguments.
@@ -28,10 +29,20 @@ class MyTest:
             checkpoints_path: path to the model checkpoints.
             logs_path: path to the model logs.
             target: target metric name.
+            overwrite: a backdoor to replace train parameters when test.
         """
         self.checkpoints_path = pathlib.Path(os.fspath(checkpoints_path))
         self.logs_path = pathlib.Path(os.fspath(logs_path))
         self.target = target
+        self.overwrite = overwrite
+
+    def _recursive_overwrite(
+        self, cfg: jsonargparse.Namespace
+    ) -> jsonargparse.Namespace:
+        for key, value in self.overwrite.items():
+            cfg[key] = type(cfg[key])(value)
+
+        return cfg
 
     def load_model(self, train_parser: jsonargparse.ArgumentParser) -> tuple:
         logdir = self.logs_path / "train"
@@ -45,6 +56,7 @@ class MyTest:
         cfg = train_parser.parse_path(
             self.checkpoints_path / f"checkpoint-{best_epoch}" / "train.yaml"
         )
+        cfg = self._recursive_overwrite(cfg)
         logger = get_logger(**cfg.logger.as_dict())
 
         logger.info("instantiate model")
