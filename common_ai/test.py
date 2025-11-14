@@ -36,7 +36,7 @@ class MyTest:
         self.target = target
         self.overwrite = overwrite
 
-    def _recursive_overwrite(
+    def _overwrite_train_config(
         self, cfg: jsonargparse.Namespace
     ) -> jsonargparse.Namespace:
         for key, value in self.overwrite.items():
@@ -56,7 +56,7 @@ class MyTest:
         cfg = train_parser.parse_path(
             self.checkpoints_path / f"checkpoint-{best_epoch}" / "train.yaml"
         )
-        cfg = self._recursive_overwrite(cfg)
+        cfg = self._overwrite_train_config(cfg)
         logger = get_logger(**cfg.logger.as_dict())
 
         logger.info("instantiate model")
