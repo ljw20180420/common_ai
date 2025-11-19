@@ -109,6 +109,27 @@ def get_explain_parser() -> jsonargparse.ArgumentParser:
     return explain_parser
 
 
+def get_app_parser() -> jsonargparse.ArgumentParser:
+    app_parser = jsonargparse.ArgumentParser(description="App AI models.")
+    app_parser.add_argument("--config", action="config")
+    app_parser.add_argument(
+        "--inference",
+        nargs="+",
+        type=MyInferenceAbstract,
+        required=True,
+        enable_path=True,
+    )
+    app_parser.add_argument(
+        "--test",
+        nargs="+",
+        type=MyTest,
+        required=True,
+        enable_path=True,
+    )
+
+    return app_parser
+
+
 def get_hta_parser() -> jsonargparse.ArgumentParser:
     hta_parser = jsonargparse.ArgumentParser(description="Hta AI models.")
     hta_parser.add_argument("--config", action="config")
@@ -146,6 +167,9 @@ def get_config() -> tuple[jsonargparse.ArgumentParser]:
     explain_parser = get_explain_parser()
     subcommands.add_subcommand(name="explain", parser=explain_parser)
 
+    app_parser = get_app_parser()
+    subcommands.add_subcommand(name="app", parser=app_parser)
+
     hta_parser = get_hta_parser()
     subcommands.add_subcommand(name="hta", parser=hta_parser)
 
@@ -158,6 +182,7 @@ def get_config() -> tuple[jsonargparse.ArgumentParser]:
         test_parser,
         infer_parser,
         explain_parser,
+        app_parser,
         hta_parser,
         hpo_parser,
     )
