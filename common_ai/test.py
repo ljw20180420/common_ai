@@ -66,6 +66,7 @@ class MyTest:
         logger.info("load model checkpoint")
         checkpoint = torch.load(
             self.checkpoints_path / f"checkpoint-{best_epoch}" / "checkpoint.pt",
+            map_location=cfg.train.device,
             weights_only=False,
         )
         model.load_state_dict(checkpoint["model"])

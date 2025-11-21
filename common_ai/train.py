@@ -238,6 +238,7 @@ class MyTrain:
             logger.info("load checkpoint for model and random generator")
             checkpoint = torch.load(
                 checkpoints_path / f"checkpoint-{self.last_epoch}" / "checkpoint.pt",
+                map_location=self.device,
                 weights_only=False,
             )
             model.load_state_dict(checkpoint["model"])
