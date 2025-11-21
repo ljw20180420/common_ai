@@ -16,7 +16,10 @@ class MyGenerator:
         self.seed = seed
         self.np_rng = np.random.default_rng(self.seed)
         self.torch_c_rng = torch.Generator(device="cpu").manual_seed(self.seed)
-        self.torch_g_rng = torch.Generator(device="cuda").manual_seed(self.seed)
+        try:
+            self.torch_g_rng = torch.Generator(device="cuda").manual_seed(self.seed)
+        except Exception as err:
+            repr(err)
 
     def get_torch_generator_by_device(
         self, device: str | torch.device
