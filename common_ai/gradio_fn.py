@@ -5,6 +5,7 @@ import pathlib
 from abc import ABC, abstractmethod
 from huggingface_hub import HfFileSystem, hf_hub_download
 from tbparse import SummaryReader
+import tempfile
 
 
 class MyGradioFnAbstract(ABC):
@@ -13,6 +14,7 @@ class MyGradioFnAbstract(ABC):
         app_cfg: jsonargparse.Namespace,
         train_parser: jsonargparse.ArgumentParser,
     ) -> None:
+        self.DEFAULT_TEMP_DIR = pathlib.Path(tempfile.gettempdir())
         self.train_parser = train_parser
         self.inference_dict = {}
         for test_cfg, inference_cfg in zip(app_cfg.test, app_cfg.inference):
