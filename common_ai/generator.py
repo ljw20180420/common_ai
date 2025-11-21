@@ -29,13 +29,16 @@ class MyGenerator:
         return self.torch_g_rng
 
     def state_dict(self) -> dict:
-        return {
+        state_dict = {
             "np_rng": self.np_rng.bit_generator.state,
             "torch_c_rng": self.torch_c_rng.get_state(),
-            "torch_g_rng": self.torch_g_rng.get_state(),
         }
+        if hasattr(self, "torch_g_rng"):
+            state_dict.update({"torch_g_rng": self.torch_g_rng.get_state()})
+        return state_dict
 
     def load_state_dict(self, state_dict: dict) -> None:
         self.np_rng.bit_generator.state = state_dict["np_rng"]
         self.torch_c_rng.set_state(state_dict["torch_c_rng"])
-        self.torch_g_rng.set_state(state_dict["torch_g_rng"])
+        if hasattr(self, "torch_g_rng"):
+            self.torch_g_rng.set_state(state_dict["torch_g_rng"])
