@@ -238,7 +238,7 @@ class MyTrain:
             logger.info("load checkpoint for model and random generator")
             checkpoint = torch.load(
                 checkpoints_path / f"checkpoint-{self.last_epoch}" / "checkpoint.pt",
-                map_location=self.device,
+                map_location=None if torch.cuda.is_available() else self.device,
                 weights_only=False,
             )
             model.load_state_dict(checkpoint["model"])
@@ -410,6 +410,7 @@ class MyTrain:
             logger.info("load checkpoint for model and random generator")
             checkpoint = torch.load(
                 checkpoints_path / f"checkpoint-{epoch}" / "checkpoint.pt",
+                map_location=None if torch.cuda.is_available() else self.device,
                 weights_only=False,
             )
             model.load_state_dict(checkpoint["model"])
