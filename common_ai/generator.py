@@ -16,10 +16,8 @@ class MyGenerator:
         self.seed = seed
         self.np_rng = np.random.default_rng(self.seed)
         self.torch_c_rng = torch.Generator(device="cpu").manual_seed(self.seed)
-        try:
+        if torch.cuda.is_available():
             self.torch_g_rng = torch.Generator(device="cuda").manual_seed(self.seed)
-        except Exception as err:
-            repr(err)
 
     def get_torch_generator_by_device(
         self, device: str | torch.device
@@ -33,12 +31,12 @@ class MyGenerator:
             "np_rng": self.np_rng.bit_generator.state,
             "torch_c_rng": self.torch_c_rng.get_state(),
         }
-        if hasattr(self, "torch_g_rng"):
+        if torch.cuda.is_available():
             state_dict.update({"torch_g_rng": self.torch_g_rng.get_state()})
         return state_dict
 
     def load_state_dict(self, state_dict: dict) -> None:
         self.np_rng.bit_generator.state = state_dict["np_rng"]
         self.torch_c_rng.set_state(state_dict["torch_c_rng"])
-        if hasattr(self, "torch_g_rng"):
+        if torch.cuda.is_available():
             self.torch_g_rng.set_state(state_dict["torch_g_rng"])
