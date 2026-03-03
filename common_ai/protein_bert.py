@@ -1,12 +1,13 @@
 import os
 import pickle
+
 import torch
+from einops import einsum, rearrange, repeat
+from einops.layers.torch import Rearrange
 from torch import nn
 
 # torch does not import opt_einsum as backend by default. import opt_einsum manually will enable it.
 from torch.backends import opt_einsum
-from einops.layers.torch import Rearrange
-from einops import rearrange, repeat, einsum
 
 from .utils import Residual
 
@@ -16,6 +17,7 @@ class ProteinBertCrossAttention(nn.Module):
         self, dim_token: int, dim_global: int, heads: int, dim_head: int
     ) -> None:
         super().__init__()
+        assert dim_global % heads == 0, "heads must divide dim_global"
         self.scale = dim_head**-0.5
         self.dim_global = dim_global
         self.heads = heads
@@ -102,14 +104,14 @@ class ProteinBertLayer(nn.Module):
         )
 
         self.local_feedforward = nn.Sequential(
-            nn.LayerNorm(dim_token, eps=1e-3),
+            nn.LayerNorm(dim_token),
             Residual(
                 nn.Sequential(
                     nn.Linear(dim_token, dim_token),
                     nn.GELU(),
                 )
             ),
-            nn.LayerNorm(dim_token, eps=1e-3),
+            nn.LayerNorm(dim_token),
         )
 
         self.global_attend_local = ProteinBertCrossAttention(
@@ -125,14 +127,14 @@ class ProteinBertLayer(nn.Module):
         )
 
         self.global_feedforward = nn.Sequential(
-            nn.LayerNorm(dim_global, eps=1e-3),
+            nn.LayerNorm(dim_global),
             Residual(
                 nn.Sequential(
                     nn.Linear(dim_global, dim_global),
                     nn.GELU(),
                 )
             ),
-            nn.LayerNorm(dim_global, eps=1e-3),
+            nn.LayerNorm(dim_global),
         )
 
     def forward(
@@ -214,47 +216,47 @@ class ProteinBertLayerCross(nn.Module):
         )
 
         self.protein_local_feedforward = nn.Sequential(
-            nn.LayerNorm(2 * dim_token, eps=1e-3),
+            nn.LayerNorm(2 * dim_token),
             Residual(
                 nn.Sequential(
                     nn.Linear(2 * dim_token, dim_token),
                     nn.GELU(),
                 )
             ),
-            nn.LayerNorm(dim_token, eps=1e-3),
+            nn.LayerNorm(dim_token),
         )
 
         self.protein_global_feedforward = nn.Sequential(
-            nn.LayerNorm(2 * dim_global, eps=1e-3),
+            nn.LayerNorm(2 * dim_global),
             Residual(
                 nn.Sequential(
                     nn.Linear(2 * dim_global, dim_global),
                     nn.GELU(),
                 )
             ),
-            nn.LayerNorm(dim_global, eps=1e-3),
+            nn.LayerNorm(dim_global),
         )
 
         self.DNA_local_feedforward = nn.Sequential(
-            nn.LayerNorm(2 * dim_token, eps=1e-3),
+            nn.LayerNorm(2 * dim_token),
             Residual(
                 nn.Sequential(
                     nn.Linear(2 * dim_token, dim_token),
                     nn.GELU(),
                 )
             ),
-            nn.LayerNorm(dim_token, eps=1e-3),
+            nn.LayerNorm(dim_token),
         )
 
         self.DNA_global_feedforward = nn.Sequential(
-            nn.LayerNorm(2 * dim_global, eps=1e-3),
+            nn.LayerNorm(2 * dim_global),
             Residual(
                 nn.Sequential(
                     nn.Linear(2 * dim_global, dim_global),
                     nn.GELU(),
                 )
             ),
-            nn.LayerNorm(dim_global, eps=1e-3),
+            nn.LayerNorm(dim_global),
         )
 
     def forward(
