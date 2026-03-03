@@ -72,19 +72,23 @@ class ElasticNet(nn.Module):
 
     def forward(self, model: nn.Module):
         elastic_net_loss = 0.0
-        for module in model.modules():
+        for m in model.modules():
             if (
-                isinstance(module, nn.Linear)
-                or isinstance(module, EinMix)
-                or isinstance(module, nn.Conv1d)
-                or isinstance(module, nn.Conv2d)
-                or isinstance(module, nn.Conv3d)
+                isinstance(m, nn.Linear)
+                or isinstance(m, nn.Bilinear)
+                or isinstance(m, EinMix)
+                or isinstance(m, nn.Conv1d)
+                or isinstance(m, nn.Conv2d)
+                or isinstance(m, nn.Conv3d)
+                or isinstance(m, nn.ConvTranspose1d)
+                or isinstance(m, nn.ConvTranspose2d)
+                or isinstance(m, nn.ConvTranspose3d)
             ):
-                if not module.weight.requires_grad:
+                if not m.weight.requires_grad:
                     continue
                 elastic_net_loss += (
-                    self.reg_l1 * module.weight.flatten().abs().sum()
-                    + self.reg_l2 * module.weight.flatten().pow(2).sum()
+                    self.reg_l1 * m.weight.flatten().abs().sum()
+                    + self.reg_l2 * m.weight.flatten().pow(2).sum()
                 )
 
         return elastic_net_loss
