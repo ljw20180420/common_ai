@@ -400,7 +400,7 @@ class ProteinBert(nn.Module):
                 model_weights[i * 23 + 10]
             )
             layer.local_feedforward[1].module[0].weight.data = rearrange(
-                torch.from_numpy(model_weights[i * 23 + 11]), "in out -> out in"
+                torch.from_numpy(model_weights[i * 23 + 11]), "i o -> o i"
             )
             layer.local_feedforward[1].module[0].bias.data = torch.from_numpy(
                 model_weights[i * 23 + 12]
@@ -412,7 +412,7 @@ class ProteinBert(nn.Module):
                 model_weights[i * 23 + 14]
             )
             layer.global_dense[0].weight.data = rearrange(
-                torch.from_numpy(model_weights[i * 23 + 15]), "in out -> out in"
+                torch.from_numpy(model_weights[i * 23 + 15]), "i o -> o i"
             )
             layer.global_dense[0].bias.data = torch.from_numpy(
                 model_weights[i * 23 + 16]
@@ -436,7 +436,7 @@ class ProteinBert(nn.Module):
                 model_weights[i * 23 + 21]
             )
             layer.global_feedforward[1].module[0].weight.data = rearrange(
-                torch.from_numpy(model_weights[i * 23 + 22]), "in out -> out in"
+                torch.from_numpy(model_weights[i * 23 + 22]), "i o -> o i"
             )
             layer.global_feedforward[1].module[0].bias.data = torch.from_numpy(
                 model_weights[i * 23 + 23]
