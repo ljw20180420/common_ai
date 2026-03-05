@@ -1,15 +1,19 @@
+import copy
+import importlib
 import os
 import pathlib
 from abc import ABC, abstractmethod
-import importlib
 from typing import Literal
-import pandas as pd
-import numpy as np
+
+import datasets
 import jsonargparse
-import shap
-import copy
 import matplotlib.pyplot as plt
-from common_ai.prs import my_text
+import numpy as np
+import pandas as pd
+import shap
+
+from .inference import MyInferenceAbstract
+from .prs import my_text
 
 
 class MyShapAbstract(ABC):
@@ -37,11 +41,18 @@ class MyShapAbstract(ABC):
         self.seed = seed
 
     @abstractmethod
-    def dataset2pandas(self):
+    def dataset2pandas(
+        self, ds_list: list[datasets.Dataset], my_inference: MyInferenceAbstract
+    ) -> pd.DataFrame:
         pass
 
     @abstractmethod
-    def predict(self):
+    def predict(
+        X: pd.DataFrame,
+        my_inference: MyInferenceAbstract,
+        test_cfg: jsonargparse.Namespace,
+        train_parser: jsonargparse.ArgumentParser,
+    ) -> pd.DataFrame:
         pass
 
     def save_explanation(
