@@ -48,11 +48,11 @@ class MyShapAbstract(ABC):
 
     @abstractmethod
     def predict(
-        X: pd.DataFrame,
+        arr: np.ndarray,
         my_inference: MyInferenceAbstract,
         test_cfg: jsonargparse.Namespace,
         train_parser: jsonargparse.ArgumentParser,
-    ) -> pd.DataFrame:
+    ) -> np.ndarray:
         pass
 
     def save_explanation(
@@ -125,8 +125,8 @@ class MyShapAbstract(ABC):
 
         ShapExplainer = getattr(importlib.import_module("shap"), self.explainer_cls)
         shap_explainer = ShapExplainer(
-            model=lambda X, my_inference=my_inference, test_cfg=explain_cfg.test, train_parser=train_parser: self.predict(
-                X, my_inference, test_cfg, train_parser
+            model=lambda arr, my_inference=my_inference, test_cfg=explain_cfg.test, train_parser=train_parser: self.predict(
+                arr, my_inference, test_cfg, train_parser
             ),
             data=back,
             seed=self.seed,
