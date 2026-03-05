@@ -378,7 +378,7 @@ class ProteinBert(nn.Module):
             # EinMix weight is (in_feature, out_feature), the same as tensorflow
             # EinMix bias is (1, ..., 1, out_feature)
             layer.extract_global_info[0].weight.data = rearrange(
-                torch.from_numpy(model_weights[i * 23 + 3]), "in out -> out in"
+                torch.from_numpy(model_weights[i * 23 + 3]), "i o -> o i"
             )
             layer.extract_global_info[0].bias.data = torch.from_numpy(
                 model_weights[i * 23 + 4]
