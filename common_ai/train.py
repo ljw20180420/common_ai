@@ -294,6 +294,7 @@ class MyTrain:
                     my_generator,
                     my_optimizer,
                     my_profiler,
+                    metrics,
                 )
             else:
                 train_loss, train_loss_num, grad_norm = self.my_train_epoch(
