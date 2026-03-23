@@ -1,17 +1,19 @@
+import importlib
 import os
 import pathlib
-from tqdm import tqdm
 import shutil
+
+import jsonargparse
 import torch
+from tbparse import SummaryReader
 from torch import nn
 from torch.utils.data import DataLoader
 from torch.utils.tensorboard import SummaryWriter
-import importlib
-import jsonargparse
-from tbparse import SummaryReader
-from .utils import instantiate_model, instantiate_metrics
-from .logger import get_logger
+from tqdm import tqdm
+
 from .generator import MyGenerator
+from .logger import get_logger
+from .utils import instantiate_metrics, instantiate_model
 
 
 class MyTest:
