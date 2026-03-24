@@ -22,6 +22,7 @@ class MyTest:
         checkpoints_path: os.PathLike,
         logs_path: os.PathLike,
         target: str,
+        maximize_target: bool,
         overwrite: dict,
         **kwargs,
     ) -> None:
@@ -31,11 +32,13 @@ class MyTest:
             checkpoints_path: path to the model checkpoints.
             logs_path: path to the model logs.
             target: target metric name.
+            maximize_target: maximize the target (false to minimize the target).
             overwrite: a backdoor to replace train parameters when test.
         """
         self.checkpoints_path = pathlib.Path(os.fspath(checkpoints_path))
         self.logs_path = pathlib.Path(os.fspath(logs_path))
         self.target = target
+        self.maximize_target = maximize_target
         self.overwrite = overwrite
 
     def _overwrite_train_config(
@@ -51,9 +54,14 @@ class MyTest:
         assert os.path.exists(logdir) and len(os.listdir(logdir)) > 0, "no train log"
         assert len(os.listdir(logdir)) == 1, "find more than one train log"
         df_train = SummaryReader(os.fspath(logdir), pivot=True).scalars
-        best_epoch = (
-            df_train["step"].iloc[df_train[f"eval/{self.target}"].argmin()].item()
-        )
+        if self.maximize_target:
+            best_epoch = (
+                df_train["step"].iloc[df_train[f"eval/{self.target}"].argmax()].item()
+            )
+        else:
+            best_epoch = (
+                df_train["step"].iloc[df_train[f"eval/{self.target}"].argmin()].item()
+            )
 
         cfg = train_parser.parse_path(
             self.checkpoints_path / f"checkpoint-{best_epoch}" / "train.yaml"

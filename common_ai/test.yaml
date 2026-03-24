@@ -1,4 +1,5 @@
 # checkpoints_path:
 # logs_path:
 # target:
+# maximize_target:
 overwrite: {}
