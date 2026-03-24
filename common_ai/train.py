@@ -314,6 +314,7 @@ class MyTrain:
                 eval_loss, eval_loss_num, metric_loss_dict = self.my_eval_epoch(
                     model, eval_dataloader, my_generator, metrics
                 )
+            print(metric_loss_dict)
 
             tensorboard_writer.add_scalar("train/loss", train_loss, epoch)
             tensorboard_writer.add_scalar("train/loss_num", train_loss_num, epoch)
