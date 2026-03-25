@@ -14,6 +14,7 @@ from tbparse import SummaryReader
 from torch import nn
 from torch.utils.tensorboard import SummaryWriter
 
+from .lr_scheduler import MyLrScheduler
 from .initializer import MyInitializer
 from .optimizer import MyOptimizer
 from .logger import get_logger
@@ -74,14 +75,7 @@ class Objective:
             MyOptimizer.hpo(trial, cfg.train, cfg.hpo.learning_rate_range)
 
             self.logger.info("choose lr_scheduler config")
-            cfg.train.lr_scheduler.name = trial.suggest_categorical(
-                "lr_scheduler/name",
-                choices=[
-                    "CosineAnnealingWarmRestarts",
-                    "ConstantLR",
-                    "ReduceLROnPlateau",
-                ],
-            )
+            MyLrScheduler.hpo(trial, cfg.train)
 
         self.logger.info("choose dataset config")
         dataset_module, dataset_cls = cfg.train.dataset.class_path.rsplit(".", 1)
@@ -200,6 +194,7 @@ class MyHpo:
         Args:
             target: target metric name.
             maximize_target: maximize the target (false to minimize the target).
+            learning_rate_range: range of learning rate of optimizer.
             study_name: the name of the study.
             n_trials: the total number of trials in the study.
             sampler: sampler continually narrows down the search space using the records of suggested parameter values and evaluated objective values.

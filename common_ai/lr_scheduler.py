@@ -1,7 +1,8 @@
 from typing import Literal
 import torch
 from .optimizer import MyOptimizer
-
+import optuna
+import jsonargparse
 
 class MyLrScheduler:
     def __init__(
@@ -97,3 +98,14 @@ class MyLrScheduler:
 
     def get_last_lr(self) -> list[float]:
         return self.lr_scheduler.get_last_lr()
+
+    @classmethod
+    def hpo(cls, trial: optuna.Trial, cfg: jsonargparse.Namespace) -> None:
+        cfg.lr_scheduler.name = trial.suggest_categorical(
+            "lr_scheduler/name",
+            choices=[
+                "CosineAnnealingWarmRestarts",
+                "ConstantLR",
+                "ReduceLROnPlateau",
+            ],
+        )
