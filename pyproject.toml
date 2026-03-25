@@ -3,18 +3,27 @@ name = "common-ai"
 version = "0.1.0"
 description = "Add your description here"
 readme = "README.md"
-requires-python = ">=3.13"
+requires-python = ">=3.14"
 dependencies = [
-    "deeplift>=0.6.13.0",
-    "einops>=0.8.2",
-    "gradio>=6.10.0",
-    "holistictraceanalysis>=0.5.0",
-    "jsonargparse>=4.47.0",
-    "opt-einsum>=3.4.0",
-    "optuna>=4.8.0",
-    "pandas[hdf5]>=3.0.1",
-    "plotnine>=0.15.3",
-    "shap>=0.51.0",
-    "tbparse>=0.0.9",
-    "transformers>=5.3.0",
+    "deeplift",
+    "einops",
+    "gradio",
+    "holistictraceanalysis",
+    "jsonargparse",
+    "opt-einsum",
+    "optuna",
+    "pandas[hdf5]",
+    "plotnine",
+    "shap",
+    "tbparse",
+    "transformers",
+    "torch",
 ]
+
+[[tool.uv.index]]
+name = "pytorch-cpu"
+url = "https://download.pytorch.org/whl/cpu"
+
+
+[tool.uv.sources]
+torch = [{ index = "pytorch-cpu" }]
