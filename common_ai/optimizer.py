@@ -2,7 +2,8 @@ from typing import Literal
 from torch import nn
 import torch
 from transformers.trainer_pt_utils import get_parameter_names
-
+import optuna
+import jsonargparse
 
 class MyOptimizer:
     def __init__(
@@ -27,12 +28,12 @@ class MyOptimizer:
         weight_decay: float,
         **kwargs,
     ) -> None:
-        """Parameters of optimizer.
+        """Arguments of optimizer.
 
         Args:
-            name: Name of optimizer.
-            learning_rate: Learn rate of the optimizer.
-            weight_decay: The l2 regularization coefficient.
+            name: name of optimizer.
+            learning_rate: learning rate of the optimizer.
+            weight_decay: the l2 regularization coefficient.
         """
         self.name = name
         self.learning_rate = learning_rate
@@ -81,3 +82,25 @@ class MyOptimizer:
 
     def step(self) -> None:
         self.optimizer.step()
+
+    @classmethod
+    def hpo(cls, trial: optuna.Trial, cfg: jsonargparse.Namespace, learning_rate_range: list[float]) -> None:
+        cfg.optimizer.name = trial.suggest_categorical(
+            "optimizer/name",
+            choices=[
+                "Adadelta",
+                "Adafactor",
+                "Adagrad",
+                "Adam",
+                "AdamW",
+                "Adamax",
+                "ASGD",
+                "NAdam",
+                "RAdam",
+                "RMSprop",
+                "SGD",
+            ],
+        )
+        cfg.optimizer.learning_rate = trial.suggest_float(
+            "optimizer/learning_rate", learning_rate_range[0], learning_rate_range[1], log=True
+        )

@@ -15,6 +15,7 @@ from torch import nn
 from torch.utils.tensorboard import SummaryWriter
 
 from .initializer import MyInitializer
+from .optimizer import MyOptimizer
 from .logger import get_logger
 from .test import MyTest
 from .train import MyTrain
@@ -70,25 +71,7 @@ class Objective:
             MyInitializer.hpo(trial, cfg.train)
 
             self.logger.info("choose optimizer config")
-            cfg.train.optimizer.name = trial.suggest_categorical(
-                "optimizer/name",
-                choices=[
-                    "Adadelta",
-                    "Adafactor",
-                    "Adagrad",
-                    "Adam",
-                    "AdamW",
-                    "Adamax",
-                    "ASGD",
-                    "NAdam",
-                    "RAdam",
-                    "RMSprop",
-                    "SGD",
-                ],
-            )
-            cfg.train.optimizer.learning_rate = trial.suggest_float(
-                "optimizer/learning_rate", 1e-5, 1e-2, log=True
-            )
+            MyOptimizer.hpo(trial, cfg.train, cfg.hpo.learning_rate_range)
 
             self.logger.info("choose lr_scheduler config")
             cfg.train.lr_scheduler.name = trial.suggest_categorical(
@@ -186,6 +169,7 @@ class MyHpo:
         self,
         target: str,
         maximize_target: bool,
+        learning_rate_range: list[float],
         study_name: str,
         n_trials: int,
         sampler: Literal[
