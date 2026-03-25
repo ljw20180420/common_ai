@@ -1,5 +1,6 @@
 hpo:
   # target:
+  # maximize_target:
   # study_name:
   n_trials: 10
   sampler: TPESampler # GridSampler, RandomSampler, TPESampler, CmaEsSampler, GPSampler, PartialFixedSampler, NSGAIISampler, QMCSampler

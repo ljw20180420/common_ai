@@ -1,23 +1,22 @@
 #!/usr/bin/env python
 
 import importlib
+import logging
 import os
 import pathlib
-from typing import Literal, Callable
+from typing import Callable, Literal
 
 import jsonargparse
 import optuna
 import torch
-from torch import nn
 import yaml
-import importlib
-from torch.utils.tensorboard import SummaryWriter
 from tbparse import SummaryReader
-import logging
+from torch import nn
+from torch.utils.tensorboard import SummaryWriter
+
+from .logger import get_logger
 from .test import MyTest
 from .train import MyTrain
-from .logger import get_logger
-
 
 # change directory to the current script
 os.chdir(pathlib.Path(__file__).parent)
@@ -28,12 +27,10 @@ class Objective:
         self,
         hpo_parser: jsonargparse.ArgumentParser,
         get_train_parser: Callable,
-        target: str,
         logger: logging.Logger,
     ) -> None:
         self.hpo_parser = hpo_parser
         self.get_train_parser = get_train_parser
-        self.target = target
         self.logger = logger
         cfg = hpo_parser.parse_args(hpo_parser.args).train
         _, preprocess, _, model_cls = cfg.model.class_path.rsplit(".", 3)
@@ -53,23 +50,23 @@ class Objective:
         )
 
     def __call__(self, trial: optuna.Trial):
-        cfg = self.hpo_parser.parse_args(self.hpo_parser.args).train
-        trial_name = f"{cfg.train.trial_name}-{trial._trial_id}"
+        cfg = self.hpo_parser.parse_args(self.hpo_parser.args)
+        trial_name = f"{cfg.train.train.trial_name}-{trial._trial_id}"
         checkpoints_path = self.checkpoints_parent / trial_name
         logs_path = self.logs_parent / trial_name
         os.makedirs(checkpoints_path, exist_ok=True)
-        model_module, model_cls = cfg.model.class_path.rsplit(".", 1)
+        model_module, model_cls = cfg.train.model.class_path.rsplit(".", 1)
 
         self.logger.info("mandatory train config")
-        cfg.train.trial_name = trial_name
-        cfg.train.last_epoch = -1
-        cfg.train.evaluation_only = False
+        cfg.train.train.trial_name = trial_name
+        cfg.train.train.last_epoch = -1
+        cfg.train.train.evaluation_only = False
 
         if issubclass(
             getattr(importlib.import_module(model_module), model_cls), nn.Module
         ):
             self.logger.info("choose initializer config")
-            cfg.initializer.name = trial.suggest_categorical(
+            cfg.train.initializer.name = trial.suggest_categorical(
                 "initializer/name",
                 choices=[
                     "uniform_",
@@ -83,7 +80,7 @@ class Objective:
             )
 
             self.logger.info("choose optimizer config")
-            cfg.optimizer.name = trial.suggest_categorical(
+            cfg.train.optimizer.name = trial.suggest_categorical(
                 "optimizer/name",
                 choices=[
                     "Adadelta",
@@ -99,12 +96,12 @@ class Objective:
                     "SGD",
                 ],
             )
-            cfg.optimizer.learning_rate = trial.suggest_float(
+            cfg.train.optimizer.learning_rate = trial.suggest_float(
                 "optimizer/learning_rate", 1e-5, 1e-2, log=True
             )
 
             self.logger.info("choose lr_scheduler config")
-            cfg.lr_scheduler.name = trial.suggest_categorical(
+            cfg.train.lr_scheduler.name = trial.suggest_categorical(
                 "lr_scheduler/name",
                 choices=[
                     "CosineAnnealingWarmRestarts",
@@ -114,21 +111,25 @@ class Objective:
             )
 
         self.logger.info("choose dataset config")
-        dataset_module, dataset_cls = cfg.dataset.class_path.rsplit(".", 1)
-        getattr(importlib.import_module(dataset_module), dataset_cls).hpo(trial, cfg)
+        dataset_module, dataset_cls = cfg.train.dataset.class_path.rsplit(".", 1)
+        getattr(importlib.import_module(dataset_module), dataset_cls).hpo(
+            trial, cfg.train
+        )
 
         self.logger.info("choose metric config")
-        for metric in cfg.metric:
+        for metric in cfg.train.metric:
             metric_module, metric_cls = metric.class_path.rsplit(".", 1)
-            getattr(importlib.import_module(metric_module), metric_cls).hpo(trial, cfg)
+            getattr(importlib.import_module(metric_module), metric_cls).hpo(
+                trial, cfg.train
+            )
 
         self.logger.info("choose model config")
-        getattr(importlib.import_module(model_module), model_cls).hpo(trial, cfg)
+        getattr(importlib.import_module(model_module), model_cls).hpo(trial, cfg.train)
 
         self.logger.info("write train config")
         train_parser = self.get_train_parser()
         train_parser.save(
-            cfg,
+            cfg.train,
             checkpoints_path / "train.yaml",
             overwrite=True,
         )
@@ -140,16 +141,18 @@ class Objective:
                 {
                     "checkpoints_path": os.fspath(checkpoints_path),
                     "logs_path": os.fspath(logs_path),
-                    "target": self.target,
+                    "target": cfg.hpo.target,
+                    "maximize_target": cfg.hpo.maximize_target,
+                    "overwrite": {},
                 },
                 fd,
             )
 
         # train
-        for epoch in MyTrain(**cfg.train.as_dict())(train_parser):
+        for epoch in MyTrain(**cfg.train.train.as_dict())(train_parser):
             df = SummaryReader(os.fspath(logs_path / "train"), pivot=True).scalars
             trial.report(
-                value=df.loc[df["step"] == epoch, f"eval/{self.target}"].item(),
+                value=df.loc[df["step"] == epoch, f"eval/{cfg.hpo.target}"].item(),
                 step=epoch,
             )
             if trial.should_prune():
@@ -159,10 +162,12 @@ class Objective:
         epoch = MyTest(
             checkpoints_path=checkpoints_path,
             logs_path=logs_path,
-            target=self.target,
+            target=cfg.hpo.target,
+            maximize_target=cfg.hpo.maximize_target,
+            overwrite={},
         )(train_parser)
         df = SummaryReader(os.fspath(logs_path / "test"), pivot=True).scalars
-        target_metric_val = df.loc[df["step"] == epoch, f"test/{self.target}"].item()
+        target_metric_val = df.loc[df["step"] == epoch, f"test/{cfg.hpo.target}"].item()
         tensorboard_writer = SummaryWriter(self.logs_parent / "hpo")
         hparam_dict = {
             param_name: (
@@ -178,7 +183,7 @@ class Objective:
         }
         tensorboard_writer.add_hparams(
             hparam_dict=hparam_dict,
-            metric_dict={f"test/{self.target}": target_metric_val},
+            metric_dict={f"test/{cfg.hpo.target}": target_metric_val},
             global_step=trial._trial_id,
         )
         tensorboard_writer.close()
@@ -190,6 +195,7 @@ class MyHpo:
     def __init__(
         self,
         target: str,
+        maximize_target: bool,
         study_name: str,
         n_trials: int,
         sampler: Literal[
@@ -219,32 +225,26 @@ class MyHpo:
 
         Args:
             target: target metric name.
+            maximize_target: maximize the target (false to minimize the target).
             study_name: the name of the study.
             n_trials: the total number of trials in the study.
             sampler: sampler continually narrows down the search space using the records of suggested parameter values and evaluated objective values.
             pruner: pruner to stop unpromising trials at the early stages.
             load_if_exists: flag to control the behavior to handle a conflict of study names. In the case where a study named study_name already exists in the storage.
         """
-        self.target = target
-        self.study_name = study_name
-        self.n_trials = n_trials
-        self.sampler = sampler
-        self.pruner = pruner
-        self.load_if_exists = load_if_exists
 
     def __call__(
         self,
         hpo_parser: jsonargparse.ArgumentParser,
         get_train_parser: Callable,
     ) -> None:
-        cfg = hpo_parser.parse_args(hpo_parser.args).train
-        logger = get_logger(**cfg.logger.as_dict())
+        cfg = hpo_parser.parse_args(hpo_parser.args)
+        logger = get_logger(**cfg.train.logger.as_dict())
 
         logger.info("instantiate objective")
         objective = Objective(
             hpo_parser=hpo_parser,
             get_train_parser=get_train_parser,
-            target=self.target,
             logger=logger,
         )
 
@@ -256,14 +256,16 @@ class MyHpo:
                     os.fspath(objective.logs_parent / "optuna_journal_storage.log")
                 ),
             ),
-            sampler=getattr(importlib.import_module("optuna.samplers"), self.sampler)(),
-            pruner=getattr(importlib.import_module("optuna.pruners"), self.pruner)(),
-            study_name=self.study_name,
-            load_if_exists=self.load_if_exists,
+            sampler=getattr(
+                importlib.import_module("optuna.samplers"), cfg.hpo.sampler
+            )(),
+            pruner=getattr(importlib.import_module("optuna.pruners"), cfg.hpo.pruner)(),
+            study_name=cfg.hpo.study_name,
+            load_if_exists=cfg.hpo.load_if_exists,
         )
 
         logger.info("start study")
         study.optimize(
             func=objective,
-            n_trials=self.n_trials,
+            n_trials=cfg.hpo.n_trials,
         )
