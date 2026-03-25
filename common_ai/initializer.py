@@ -1,5 +1,7 @@
 from typing import Literal
 
+import jsonargparse
+import optuna
 from einops.layers.torch import EinMix
 from torch import nn
 
@@ -74,3 +76,18 @@ class MyInitializer:
             # norm layers
             elif isinstance(m, nn.RMSNorm):
                 nn.init.constant_(m.weight, 1.0)
+
+    @classmethod
+    def hpo(cls, trial: optuna.Trial, cfg: jsonargparse.Namespace) -> None:
+        cfg.initializer.name = trial.suggest_categorical(
+            "initializer/name",
+            choices=[
+                "uniform_",
+                "normal_",
+                "xavier_uniform_",
+                "xavier_normal_",
+                "kaiming_uniform_",
+                "kaiming_normal_",
+                "trunc_normal_",
+            ],
+        )

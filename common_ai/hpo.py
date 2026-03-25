@@ -14,6 +14,7 @@ from tbparse import SummaryReader
 from torch import nn
 from torch.utils.tensorboard import SummaryWriter
 
+from .initializer import MyInitializer
 from .logger import get_logger
 from .test import MyTest
 from .train import MyTrain
@@ -66,18 +67,7 @@ class Objective:
             getattr(importlib.import_module(model_module), model_cls), nn.Module
         ):
             self.logger.info("choose initializer config")
-            cfg.train.initializer.name = trial.suggest_categorical(
-                "initializer/name",
-                choices=[
-                    "uniform_",
-                    "normal_",
-                    "xavier_uniform_",
-                    "xavier_normal_",
-                    "kaiming_uniform_",
-                    "kaiming_normal_",
-                    "trunc_normal_",
-                ],
-            )
+            MyInitializer.hpo(trial, cfg.train)
 
             self.logger.info("choose optimizer config")
             cfg.train.optimizer.name = trial.suggest_categorical(
