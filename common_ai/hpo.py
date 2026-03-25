@@ -261,6 +261,7 @@ class MyHpo:
             )(),
             pruner=getattr(importlib.import_module("optuna.pruners"), cfg.hpo.pruner)(),
             study_name=cfg.hpo.study_name,
+            direction="maximize" if cfg.hpo.maximize_target else "minimize",
             load_if_exists=cfg.hpo.load_if_exists,
         )
 
