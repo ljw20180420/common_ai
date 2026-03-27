@@ -18,6 +18,7 @@ dependencies = [
     "tbparse",
     "transformers",
     "torch",
+    "datasets>=2.19.1",
 ]
 
 [[tool.uv.index]]

@@ -7,9 +7,14 @@ import jsonargparse
 import numpy as np
 from einops.layers.torch import EinMix
 from torch import nn
-
+import torch
 from .model import MyModelAbstract
 
+def reproduce():
+    # improve reproducibility
+    # https://docs.pytorch.org/docs/stable/notes/randomness.html
+    torch.use_deterministic_algorithms(True)
+    torch.backends.cudnn.benchmark = False
 
 def instantiate_model(cfg: jsonargparse.Namespace) -> MyModelAbstract:
     model_module, model_cls = cfg.model.class_path.rsplit(".", 1)
