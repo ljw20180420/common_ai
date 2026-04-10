@@ -1,11 +1,12 @@
-import os
 import importlib
-import jsonargparse
+import os
 import pathlib
+import tempfile
 from abc import ABC, abstractmethod
+
+import jsonargparse
 from huggingface_hub import HfFileSystem, hf_hub_download
 from tbparse import SummaryReader
-import tempfile
 
 
 class MyGradioFnAbstract(ABC):
@@ -35,11 +36,18 @@ class MyGradioFnAbstract(ABC):
                 ).parent.parent.as_posix()
 
             df_train = SummaryReader(f"{test_cfg.logs_path}/train", pivot=True).scalars
-            best_epoch = (
-                df_train["step"]
-                .iloc[df_train[f"eval/{test_cfg.target}"].argmin()]
-                .item()
-            )
+            if test_cfg.maximize_target:
+                best_epoch = (
+                    df_train["step"]
+                    .iloc[df_train[f"eval/{test_cfg.target}"].argmax()]
+                    .item()
+                )
+            else:
+                best_epoch = (
+                    df_train["step"]
+                    .iloc[df_train[f"eval/{test_cfg.target}"].argmin()]
+                    .item()
+                )
 
             if not os.path.exists(test_cfg.checkpoints_path):
                 # no local checkpoints, assume checkpoints_path as repo_id
