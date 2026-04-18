@@ -21,9 +21,6 @@ from .logger import get_logger
 from .test import MyTest
 from .train import MyTrain
 
-# change directory to the current script
-os.chdir(pathlib.Path(__file__).parent)
-
 
 class Objective:
     def __init__(
