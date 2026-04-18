@@ -15,14 +15,27 @@ from huggingface_hub import (
 class MyUpload:
     def __init__(self,
         output_dir: os.PathLike,
-        run_type: str,
+        run_type: Literal["formal", "unittest"],
         run_name: str,
         preprocess: str,
         model_cls: str,
         data_name: str,
         trial_name: str,
         ignore_patterns: list[str],
+        **kwargs,
     ) -> None:
+        """Upload arguments.
+
+        Args:
+            output_dir: root dir saves all results.
+            run_type: formal or unittest.
+            run_name: name for the run task.
+            preprocess: preprocess name for dataset.
+            model_cls: model class.
+            data_name: name of dataset.
+            trial_name: name of trial.
+            ignore_patterns: file pattern to ignore from uploading.
+        """
         username = whoami()["name"]
         self.repo_di = f"{username}/{preprocess}_{model_cls}_{data_name}"
         self.output_dir = pathlib.Path(os.fspath(output_dir))
