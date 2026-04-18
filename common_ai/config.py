@@ -15,7 +15,7 @@ from .metric import MyMetricAbstract
 from .model import MyModelAbstract
 from .inference import MyInferenceAbstract
 from .shap import MyShapAbstract
-
+from .upload import MyUpload
 
 def get_train_parser() -> jsonargparse.ArgumentParser:
     train_parser = jsonargparse.ArgumentParser(description="Train AI models.")
@@ -148,6 +148,12 @@ def get_hpo_parser() -> jsonargparse.ArgumentParser:
 
     return hpo_parser
 
+def get_upload_parser() -> jsonargparse.ArgumentParser:
+    upload_parser = jsonargparse.ArgumentParser(description="Upload AI models.")
+    upload_parser.add_argument("--config", action="config")
+    upload_parser.add_class_arguments(theclass=MyUpload, nested_key=None)
+
+    return upload_parser
 
 def get_config() -> tuple[jsonargparse.ArgumentParser]:
     parser = jsonargparse.ArgumentParser(
@@ -176,6 +182,9 @@ def get_config() -> tuple[jsonargparse.ArgumentParser]:
     hpo_parser = get_hpo_parser()
     subcommands.add_subcommand(name="hpo", parser=hpo_parser)
 
+    upload_parser = get_upload_parser()
+    subcommands.add_subcommand(name="upload", parser=upload_parser)
+
     return (
         parser,
         train_parser,
@@ -185,4 +194,5 @@ def get_config() -> tuple[jsonargparse.ArgumentParser]:
         app_parser,
         hta_parser,
         hpo_parser,
+        upload_parser,
     )

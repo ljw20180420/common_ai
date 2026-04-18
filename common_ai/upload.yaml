@@ -1,0 +1,10 @@
+# output_dir:
+run_type: "formal"
+run_name: "default"
+# preprocess:
+# model_cls:
+# data_name:
+trial_name: "default"
+ignore_patterns:
+  - "*.png"
+  - "*.pdf"
