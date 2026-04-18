@@ -37,7 +37,7 @@ class MyUpload:
             ignore_patterns: file pattern to ignore from uploading.
         """
         username = whoami()["name"]
-        self.repo_di = f"{username}/{preprocess}_{model_cls}_{data_name}"
+        self.repo_id = f"{username}/{preprocess}_{model_cls}_{data_name}"
         self.output_dir = pathlib.Path(os.fspath(output_dir))
         self.run_type = run_type
         self.run_name = run_name
