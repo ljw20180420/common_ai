@@ -1,2 +1,2 @@
-**/__pycache
-/*.yaml
+__pycache__
+*.yaml
