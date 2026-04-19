@@ -4,11 +4,13 @@ import os
 import pathlib
 import shutil
 from typing import Literal
+import time
 
 from huggingface_hub import (
     upload_folder,
     upload_large_folder,
     whoami,
+    errors,
 )
 
 
@@ -49,7 +51,15 @@ class MyUpload:
 
     def __call__(self) -> None:
         self.upload()
-        self.delete()
+
+        success=False
+        while not success:
+            try:
+                self.delete()
+                success=True
+            except errors.HfHubHTTPError as e:
+                print(e)
+                time.sleep(1)
 
     def _comp_path(self, comp: Literal["checkpoints", "logs"]) -> os.PathLike:
         return self.output_dir / self.run_type / self.run_name / comp / self.preprocess / self.model_cls / self.data_name / self.trial_name
