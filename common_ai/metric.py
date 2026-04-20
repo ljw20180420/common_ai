@@ -1,6 +1,4 @@
 from abc import ABC, abstractmethod
-import optuna
-import jsonargparse
 
 
 class MyMetricAbstract(ABC):
@@ -20,8 +18,3 @@ class MyMetricAbstract(ABC):
     @abstractmethod
     def hpo(cls):
         pass
-
-    # @classmethod
-    # @abstractmethod
-    # def hpo(cls, trial: optuna.Trial, cfg: jsonargparse.Namespace):
-    #     pass
