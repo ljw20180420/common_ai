@@ -5,6 +5,7 @@ import pathlib
 import shutil
 from typing import Literal
 import time
+import httpx
 
 from huggingface_hub import (
     upload_folder,
@@ -57,7 +58,7 @@ class MyUpload:
             try:
                 self.delete()
                 success=True
-            except errors.HfHubHTTPError as e:
+            except (errors.HfHubHTTPError, httpx.ConnectError, httpx.ReadError) as e:
                 print(e)
                 time.sleep(1)
 
