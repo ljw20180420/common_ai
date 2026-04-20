@@ -10,6 +10,7 @@ from torch import nn
 from torch.utils.data import DataLoader
 from torch.utils.tensorboard import SummaryWriter
 from tqdm import tqdm
+from huggingface_hub import HfFileSystem, hf_hub_download
 
 from .generator import MyGenerator
 from .logger import get_logger
@@ -49,9 +50,45 @@ class MyTest:
 
         return cfg
 
+    def _logs_path(self) -> os.PathLike:
+        if not os.path.exists(self.logs_path):
+            # no local logs, assume logs_path as repo_id
+            repo_id = self.logs_path.as_posix()
+            hfs = HfFileSystem()
+            train_logs = hfs.glob(f"{repo_id}/logs/train/*")
+            assert len(train_logs) == 1, "train log not found or not unique"
+            self.logs_path = pathlib.Path(
+                hf_hub_download(
+                    repo_id=repo_id,
+                    filename=f"logs/train/{train_logs[0].rsplit('/', 1)[-1]}",
+                    repo_type="model",
+                )
+            ).parent.parent.as_posix()
+
+        return self.logs_path
+
+    def _checkpoints_path(self, best_epoch: int) -> os.PathLike:
+        if not os.path.exists(self.checkpoints_path):
+            # no local checkpoints, assume checkpoints_path as repo_id
+            repo_id = self.checkpoints_path.as_posix()
+            hfs = HfFileSystem()
+            checkpoint_files = hfs.glob(
+                f"{repo_id}/checkpoints/checkpoint-{best_epoch}/*"
+            )
+            for checkpoint_file in checkpoint_files:
+                self.checkpoints_path = pathlib.Path(
+                    hf_hub_download(
+                        repo_id=repo_id,
+                        filename=f"checkpoints/checkpoint-{best_epoch}/{checkpoint_file.rsplit('/', 1)[-1]}",
+                        repo_type="model",
+                    )
+                ).parent.parent.as_posix()
+        
+        return self.checkpoints_path
+
     def load_model(self, train_parser: jsonargparse.ArgumentParser) -> tuple:
-        logdir = self.logs_path / "train"
-        assert os.path.exists(logdir) and len(os.listdir(logdir)) > 0, "no train log"
+        logdir = self._logs_path() / "train"
+        assert len(os.listdir(logdir)) > 0, "no train log"
         assert len(os.listdir(logdir)) == 1, "find more than one train log"
         df_train = SummaryReader(os.fspath(logdir), pivot=True).scalars
         if self.maximize_target:
@@ -64,7 +101,7 @@ class MyTest:
             )
 
         cfg = train_parser.parse_path(
-            self.checkpoints_path / f"checkpoint-{best_epoch}" / "train.yaml"
+            self._checkpoints_path(best_epoch) / f"checkpoint-{best_epoch}" / "train.yaml"
         )
         cfg = self._overwrite_train_config(cfg)
         logger = get_logger(**cfg.logger.as_dict())
@@ -75,7 +112,7 @@ class MyTest:
 
         logger.info("load model checkpoint")
         checkpoint = torch.load(
-            self.checkpoints_path / f"checkpoint-{best_epoch}" / "checkpoint.pt",
+            self._checkpoints_path(best_epoch) / f"checkpoint-{best_epoch}" / "checkpoint.pt",
             map_location=None if torch.cuda.is_available() else cfg.train.device,
             weights_only=False,
         )
