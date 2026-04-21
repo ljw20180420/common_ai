@@ -3,6 +3,9 @@ name = "common-ai"
 version = "0.1.0"
 description = "Add your description here"
 readme = "README.md"
+authors = [
+    { name = "ljw", email = "ljw2017@sjtu.edu.cn" }
+]
 requires-python = ">=3.14"
 dependencies = [
     "deeplift",
@@ -18,13 +21,12 @@ dependencies = [
     "tbparse",
     "transformers",
     "torch",
-    "datasets>=2.19.1",
+    "datasets",
 ]
 
-[[tool.uv.index]]
-name = "pytorch-cpu"
-url = "https://download.pytorch.org/whl/cpu"
+[project.scripts]
+common-ai = "common_ai:main"
 
-
-[tool.uv.sources]
-torch = [{ index = "pytorch-cpu" }]
+[build-system]
+requires = ["uv_build>=0.9.16,<0.10.0"]
+build-backend = "uv_build"
