@@ -8,3 +8,4 @@ trial_name: "default"
 ignore_patterns:
   - "*.png"
   - "*.pdf"
+  - "*.html"
