@@ -63,7 +63,10 @@ class MyTest:
                     filename=f"logs/train/{train_logs[0].rsplit('/', 1)[-1]}",
                     repo_type="model",
                 )
-            ).parent.parent.as_posix()
+            ).parent.parent
+
+        assert len(os.listdir(self.logs_path / "train")) > 0, "no train log"
+        assert len(os.listdir(self.logs_path / "train")) == 1, "find more than one train log"
 
         return self.logs_path
 
@@ -82,15 +85,12 @@ class MyTest:
                         filename=f"checkpoints/checkpoint-{best_epoch}/{checkpoint_file.rsplit('/', 1)[-1]}",
                         repo_type="model",
                     )
-                ).parent.parent.as_posix()
+                ).parent.parent
         
         return self.checkpoints_path
 
-    def load_model(self, train_parser: jsonargparse.ArgumentParser) -> tuple:
-        logdir = self._logs_path() / "train"
-        assert len(os.listdir(logdir)) > 0, "no train log"
-        assert len(os.listdir(logdir)) == 1, "find more than one train log"
-        df_train = SummaryReader(os.fspath(logdir), pivot=True).scalars
+    def load_train_cfg(self, train_parser: jsonargparse.ArgumentParser) -> tuple[int, jsonargparse.Namespace]:
+        df_train = SummaryReader(os.fspath(self._logs_path() / "train"), pivot=True).scalars
         if self.maximize_target:
             best_epoch = (
                 df_train["step"].iloc[df_train[f"eval/{self.target}"].argmax()].item()
@@ -104,6 +104,13 @@ class MyTest:
             self._checkpoints_path(best_epoch) / f"checkpoint-{best_epoch}" / "train.yaml"
         )
         cfg = self._overwrite_train_config(cfg)
+
+        return best_epoch, cfg
+
+
+    def load_model(self, train_parser: jsonargparse.ArgumentParser) -> tuple:
+        best_epoch, cfg = self.load_train_cfg(train_parser)
+
         logger = get_logger(**cfg.logger.as_dict())
 
         logger.info("instantiate model")
