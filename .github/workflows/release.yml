@@ -1,0 +1,23 @@
+name: Release
+
+on:
+  release:
+    types: [created]
+
+jobs:
+  pypi:
+    name: Publish to PyPI
+    runs-on: ubuntu-latest
+    # Environment and permissions trusted publishing.
+    environment:
+      # This environment will be created in the project automatically when the workflow is run for the first time.
+      name: pypi
+    permissions:
+      id-token: write
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v5
+      - name: Build SDist
+        run: pipx run build --sdist
+      - uses: pypa/gh-action-pypi-publish@release/v1
+      
