@@ -74,8 +74,7 @@ class MyTrain:
         logger.info("open tensorboard writer")
         checkpoints_path, logs_path = get_save_path(cfg)
         if os.path.exists(logs_path / "train"):
-            if os.path.exists(logs_path / "train.bak"):
-                shutil.rmtree(logs_path / "train.bak")
+            assert not os.path.exists(logs_path / "train.bak"), "train.bak already exists"
             os.rename(logs_path / "train", logs_path / "train.bak")
         if self.evaluation_only:
             assert os.path.exists(logs_path / "train.bak"), "no train log"
@@ -83,8 +82,7 @@ class MyTrain:
             tbdf = SummaryReader(os.fspath(logs_path / "train.bak"), pivot=True).scalars
         else:
             if os.path.exists(logs_path / "profile"):
-                if os.path.exists(logs_path / "profile.bak"):
-                    shutil.rmtree(logs_path / "profile.bak")
+                assert not os.path.exists(logs_path / "profile.bak"), "profile.bak already exists"
                 os.rename(logs_path / "profile", logs_path / "profile.bak")
         tensorboard_writer = SummaryWriter(logs_path / "train")
 
@@ -446,9 +444,9 @@ class MyTrain:
                     model, eval_dataloader, my_generator, metrics
                 )
 
-            tbdf.loc[tbdf["step"] == epoch, f"eval/loss"] = eval_loss
-            tbdf.loc[tbdf["step"] == epoch, f"eval/loss_num"] = eval_loss_num
-            tbdf.loc[tbdf["step"] == epoch, f"eval/mean_loss"] = (
+            tbdf.loc[tbdf["step"] == epoch, "eval/loss"] = eval_loss
+            tbdf.loc[tbdf["step"] == epoch, "eval/loss_num"] = eval_loss_num
+            tbdf.loc[tbdf["step"] == epoch, "eval/mean_loss"] = (
                 eval_loss / eval_loss_num
             )
             for metric_name, metric_val in metric_loss_dict.items():
