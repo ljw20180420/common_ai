@@ -111,8 +111,8 @@ class SeqTokenizer:
 
 
 def split_train_valid_test(
-    ds: datasets.Dataset, validation_ratio: float, test_ratio: float, seed: int
-) -> datasets.Dataset:
+    ds: datasets.DatasetDict, validation_ratio: float, test_ratio: float, seed: int
+) -> datasets.DatasetDict:
     ds = ds["train"].train_test_split(
         test_size=test_ratio + validation_ratio, seed=seed
     )
