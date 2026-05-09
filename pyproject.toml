@@ -6,7 +6,7 @@ readme = "README.md"
 authors = [
     { name = "ljw", email = "ljw2017@sjtu.edu.cn" }
 ]
-requires-python = ">=3.11"
+requires-python = ">=3.10"
 dependencies = [
     "deeplift",
     "einops",
