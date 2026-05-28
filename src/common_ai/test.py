@@ -129,7 +129,7 @@ class MyTest:
         logger.info("set model device")
         setattr(model, "device", cfg.train.device)
         if isinstance(model, nn.Module):
-            model = model.to(cfg.train.device)
+            model.to(cfg.train.device)
             model.eval()
 
         return best_epoch, cfg, logger, model, my_generator

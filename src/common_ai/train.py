@@ -236,9 +236,10 @@ class MyTrain:
         if self.last_epoch >= 0:
             my_generator.load_state_dict(checkpoint["generator"])
 
+        model = instantiate_model(cfg)
         # Move model to the device before setup optimizer because some optimizers like Adagrad use device information.
         setattr(model, "device", self.device)
-        model = instantiate_model(cfg).to(model.device)
+        model.to(model.device)
         if self.last_epoch >= 0:
             model.load_state_dict(checkpoint["model"])
         else:
