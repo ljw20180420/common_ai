@@ -73,17 +73,15 @@ class MyTrain:
 
         logger.info("open tensorboard writer")
         checkpoints_path, logs_path = get_save_path(cfg)
+        tbdf = None
         if os.path.exists(logs_path / "train"):
             assert not os.path.exists(logs_path / "train.bak"), "train.bak already exists"
             os.rename(logs_path / "train", logs_path / "train.bak")
-        if self.evaluation_only:
-            assert os.path.exists(logs_path / "train.bak"), "no train log"
             logger.info("read logging directory")
             tbdf = SummaryReader(os.fspath(logs_path / "train.bak"), pivot=True).scalars
-        else:
-            if os.path.exists(logs_path / "profile"):
-                assert not os.path.exists(logs_path / "profile.bak"), "profile.bak already exists"
-                os.rename(logs_path / "profile", logs_path / "profile.bak")
+        if not self.evaluation_only and os.path.exists(logs_path / "profile"):
+            assert not os.path.exists(logs_path / "profile.bak"), "profile.bak already exists"
+            os.rename(logs_path / "profile", logs_path / "profile.bak")
         tensorboard_writer = SummaryWriter(logs_path / "train")
 
         try:
@@ -95,6 +93,7 @@ class MyTrain:
                     logs_path,
                     logger,
                     tensorboard_writer,
+                    tbdf,
                 ):
                     yield epoch
             else:
@@ -223,7 +222,17 @@ class MyTrain:
         logs_path: os.PathLike,
         logger: logging.Logger,
         tensorboard_writer: SummaryWriter,
+        tbdf: pd.DataFrame | None,
     ) -> Generator:
+        if self.last_epoch >= 0:
+            assert tbdf is not None, "last_epoch >= 0 but not train log found"
+            for tag in tbdf.columns:
+                if tag == "step":
+                    continue
+                for epoch, scalar_value in zip(tbdf["step"], tbdf[tag]):
+                    tensorboard_writer.add_scalar(tag, scalar_value, global_step=epoch)
+            tensorboard_writer.flush()
+
         checkpoints_path = pathlib.Path(os.fspath(checkpoints_path))
         if self.last_epoch >= 0:
             checkpoint = torch.load(
