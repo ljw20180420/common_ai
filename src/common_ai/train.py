@@ -73,16 +73,21 @@ class MyTrain:
 
         logger.info("open tensorboard writer")
         checkpoints_path, logs_path = get_save_path(cfg)
-        tbdf = None
         if os.path.exists(logs_path / "train"):
             assert not os.path.exists(logs_path / "train.bak"), "train.bak already exists"
             os.rename(logs_path / "train", logs_path / "train.bak")
-            logger.info("read logging directory")
+        tensorboard_writer = SummaryWriter(logs_path / "train")
+        if os.path.exists(logs_path / "train.bak"):
             tbdf = SummaryReader(os.fspath(logs_path / "train.bak"), pivot=True).scalars
+            for tag in tbdf.columns:
+                if tag == "step":
+                    continue
+                for epoch, scalar_value in zip(tbdf["step"], tbdf[tag]):
+                    tensorboard_writer.add_scalar(tag, scalar_value, global_step=epoch)
+            tensorboard_writer.flush()
         if not self.evaluation_only and os.path.exists(logs_path / "profile"):
             assert not os.path.exists(logs_path / "profile.bak"), "profile.bak already exists"
             os.rename(logs_path / "profile", logs_path / "profile.bak")
-        tensorboard_writer = SummaryWriter(logs_path / "train")
 
         try:
             if not self.evaluation_only:
@@ -93,7 +98,6 @@ class MyTrain:
                     logs_path,
                     logger,
                     tensorboard_writer,
-                    tbdf,
                 ):
                     yield epoch
             else:
@@ -103,17 +107,14 @@ class MyTrain:
                     checkpoints_path,
                     logger,
                     tensorboard_writer,
-                    tbdf,
                 ):
                     yield epoch
 
-            logger.info("close tensorboard writer")
             tensorboard_writer.close()
             for pn in ["train", "profile"]:
                 if os.path.exists(logs_path / f"{pn}.bak"):
                     shutil.rmtree(logs_path / f"{pn}.bak")
         except Exception as err:
-            logger.info("close tensorboard writer")
             tensorboard_writer.close()
             for pn in ["train", "profile"]:
                 if os.path.exists(logs_path / f"{pn}.bak"):
@@ -222,17 +223,7 @@ class MyTrain:
         logs_path: os.PathLike,
         logger: logging.Logger,
         tensorboard_writer: SummaryWriter,
-        tbdf: pd.DataFrame | None,
     ) -> Generator:
-        if self.last_epoch >= 0:
-            assert tbdf is not None, "last_epoch >= 0 but not train log found"
-            for tag in tbdf.columns:
-                if tag == "step":
-                    continue
-                for epoch, scalar_value in zip(tbdf["step"], tbdf[tag]):
-                    tensorboard_writer.add_scalar(tag, scalar_value, global_step=epoch)
-            tensorboard_writer.flush()
-
         checkpoints_path = pathlib.Path(os.fspath(checkpoints_path))
         if self.last_epoch >= 0:
             checkpoint = torch.load(
@@ -349,7 +340,6 @@ class MyTrain:
                 logger.info(f"update learning rate for epoch {epoch}")
                 my_lr_scheduler.step(eval_loss / eval_loss_num)
 
-            logger.info(f"flush tensorboard log for epoch {epoch}")
             tensorboard_writer.flush()
 
             logger.info(f"save epoch {epoch}")
@@ -392,7 +382,6 @@ class MyTrain:
         checkpoints_path: os.PathLike,
         logger: logging.Logger,
         tensorboard_writer: SummaryWriter,
-        tbdf: pd.DataFrame,
     ) -> Generator:
         logger.info("instantiate model")
         model = instantiate_model(cfg)
@@ -455,13 +444,12 @@ class MyTrain:
                     model, eval_dataloader, my_generator, metrics
                 )
 
-            tbdf.loc[tbdf["step"] == epoch, "eval/loss"] = eval_loss
-            tbdf.loc[tbdf["step"] == epoch, "eval/loss_num"] = eval_loss_num
-            tbdf.loc[tbdf["step"] == epoch, "eval/mean_loss"] = (
-                eval_loss / eval_loss_num
-            )
+            tensorboard_writer.add_scalar("eval/loss", eval_loss, global_step=epoch)
+            tensorboard_writer.add_scalar("eval/loss_num", eval_loss_num, global_step=epoch)
+            tensorboard_writer.add_scalar("eval/mean_loss", eval_loss / eval_loss_num, global_step=epoch)
             for metric_name, metric_val in metric_loss_dict.items():
-                tbdf.loc[tbdf["step"] == epoch, f"eval/{metric_name}"] = metric_val
+                tensorboard_writer.add_scalar(f"eval/{metric_name}", metric_val, global_step=epoch)
+            tensorboard_writer.flush()
 
             logger.info(f"update config for epoch {epoch}")
             cfg.train.last_epoch = epoch
@@ -472,10 +460,3 @@ class MyTrain:
             )
 
             yield epoch
-
-        logger.info("save tensorboard log")
-        for tag in tbdf.columns:
-            if tag == "step":
-                continue
-            for epoch, scalar_value in zip(tbdf["step"], tbdf[tag]):
-                tensorboard_writer.add_scalar(tag, scalar_value, global_step=epoch)
