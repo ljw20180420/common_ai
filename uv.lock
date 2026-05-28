@@ -777,7 +777,7 @@ wheels = [
 
 [[package]]
 name = "common-ai"
-version = "0.1.7"
+version = "0.1.8"
 source = { editable = "." }
 dependencies = [
     { name = "datasets" },
