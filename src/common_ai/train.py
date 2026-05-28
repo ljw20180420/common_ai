@@ -224,44 +224,45 @@ class MyTrain:
         logger: logging.Logger,
         tensorboard_writer: SummaryWriter,
     ) -> Generator:
-        logger.info("instantiate model")
-        model = instantiate_model(cfg)
-        my_generator = MyGenerator(**cfg.generator.as_dict())
-        metrics = instantiate_metrics(cfg)
-        my_optimizer = MyOptimizer(**cfg.optimizer.as_dict())
-        my_lr_scheduler = MyLrScheduler(**cfg.lr_scheduler.as_dict())
-        my_early_stopping = MyEarlyStopping(**cfg.early_stopping.as_dict())
-        my_profiler = MyProfiler(**cfg.profiler.as_dict()).set_logs_path(logs_path)
-
         checkpoints_path = pathlib.Path(os.fspath(checkpoints_path))
         if self.last_epoch >= 0:
-            logger.info("load checkpoint for model and random generator")
             checkpoint = torch.load(
                 checkpoints_path / f"checkpoint-{self.last_epoch}" / "checkpoint.pt",
                 map_location=None if torch.cuda.is_available() else self.device,
                 weights_only=False,
             )
-            model.load_state_dict(checkpoint["model"])
+
+        my_generator = MyGenerator(**cfg.generator.as_dict())
+        if self.last_epoch >= 0:
             my_generator.load_state_dict(checkpoint["generator"])
-            if isinstance(model, nn.Module):
-                my_optimizer.load_state_dict(checkpoint["optimizer"])
-                my_lr_scheduler.load_state_dict(checkpoint["lr_scheduler"])
+
+        # Move model to the device before setup optimizer because some optimizers like Adagrad use device information.
+        setattr(model, "device", self.device)
+        model = instantiate_model(cfg).to(model.device)
+        if self.last_epoch >= 0:
+            model.load_state_dict(checkpoint["model"])
         else:
-            logger.info("initialize model weights")
             my_initializer = MyInitializer(**cfg.initializer.as_dict())
             if hasattr(model, "my_initialize_model"):
                 model.my_initialize_model(my_initializer, my_generator)
             else:
                 my_initializer(model, my_generator)
 
-        # Move model to the device before setup optimizer because some optimizers like Adagrad use device information.
-        logger.info("set model device")
-        setattr(model, "device", self.device)
+        my_optimizer = MyOptimizer(**cfg.optimizer.as_dict())
         if isinstance(model, nn.Module):
-            model = model.to(self.device)
-            logger.info("setup optimizer and lr_scheduler")
             my_optimizer(model)
+            if self.last_epoch >= 0:
+                my_optimizer.load_state_dict(checkpoint["optimizer"])
+
+        my_lr_scheduler = MyLrScheduler(**cfg.lr_scheduler.as_dict())
+        if isinstance(model, nn.Module):
             my_lr_scheduler(my_optimizer)
+            if self.last_epoch >= 0:
+                my_lr_scheduler.load_state_dict(checkpoint["lr_scheduler"])
+
+        metrics = instantiate_metrics(cfg)
+        my_early_stopping = MyEarlyStopping(**cfg.early_stopping.as_dict())
+        my_profiler = MyProfiler(**cfg.profiler.as_dict()).set_logs_path(logs_path)
 
         logger.info("setup data loader")
         dataset_module, dataset_cls = cfg.dataset.class_path.rsplit(".", 1)
