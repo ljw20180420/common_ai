@@ -162,6 +162,8 @@ def get_upload_dataset_parser() -> jsonargparse.ArgumentParser:
     upload_dataset_parser.add_class_arguments(theclass=MyUploadDataset, nested_key=None)
     upload_dataset_parser.add_subclass_arguments(baseclass=MyDatasetAbstract, nested_key="dataset")
 
+    return upload_dataset_parser
+
 def get_config() -> tuple[jsonargparse.ArgumentParser]:
     parser = jsonargparse.ArgumentParser(
         description="Arguments of AI models.",
