@@ -10,6 +10,7 @@ class MyUploadDataset:
     def __init__(
         self,
         repo_id: str,
+        config_name: str,
         readme: os.PathLike,
         **kwargs,
     ):
@@ -17,9 +18,11 @@ class MyUploadDataset:
 
         Args:
             repo_id: huggingface repository id user/dataset_name.
+            config_name: subdataset name.
             readme: path to local README.md file.
         """
         self.repo_id = repo_id
+        self.config_name = config_name
         self.readme = readme
 
     def __call__(self, cfg_dataset: jsonargparse.Namespace):
@@ -30,7 +33,7 @@ class MyUploadDataset:
 
         while True:
             try:
-                dataset.push_to_hub(repo_id=self.repo_id)
+                dataset.push_to_hub(repo_id=self.repo_id, config_name=self.config_name)
                 break
             except KeyboardInterrupt as e:
                 print(e)
