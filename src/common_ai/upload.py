@@ -58,6 +58,9 @@ class MyUpload:
             try:
                 self.delete()
                 success=True
+            except KeyboardInterrupt as e:
+                print(e)
+                break
             except (errors.HfHubHTTPError, httpx.ConnectError, httpx.ReadError) as e:
                 print(e)
                 time.sleep(1)
