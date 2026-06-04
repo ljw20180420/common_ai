@@ -16,6 +16,7 @@ from .model import MyModelAbstract
 from .inference import MyInferenceAbstract
 from .shap import MyShapAbstract
 from .upload import MyUpload
+from .upload_dataset import MyUploadDataset
 
 def get_train_parser() -> jsonargparse.ArgumentParser:
     train_parser = jsonargparse.ArgumentParser(description="Train AI models.")
@@ -155,6 +156,12 @@ def get_upload_parser() -> jsonargparse.ArgumentParser:
 
     return upload_parser
 
+def get_upload_dataset_parser() -> jsonargparse.ArgumentParser:
+    upload_dataset_parser = jsonargparse.ArgumentParser(description="Upload dataset.")
+    upload_dataset_parser.add_argument("--config", action="config")
+    upload_dataset_parser.add_class_arguments(theclass=MyUploadDataset, nested_key=None)
+    upload_dataset_parser.add_subclass_arguments(baseclass=MyDatasetAbstract, nested_key="dataset")
+
 def get_config() -> tuple[jsonargparse.ArgumentParser]:
     parser = jsonargparse.ArgumentParser(
         description="Arguments of AI models.",
@@ -185,6 +192,9 @@ def get_config() -> tuple[jsonargparse.ArgumentParser]:
     upload_parser = get_upload_parser()
     subcommands.add_subcommand(name="upload", parser=upload_parser)
 
+    upload_dataset_parser = get_upload_dataset_parser()
+    subcommands.add_subcommand(name="upload_dataset", parser=upload_dataset_parser)
+
     return (
         parser,
         train_parser,
@@ -195,4 +205,5 @@ def get_config() -> tuple[jsonargparse.ArgumentParser]:
         hta_parser,
         hpo_parser,
         upload_parser,
+        upload_dataset_parser,
     )
