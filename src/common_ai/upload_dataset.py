@@ -11,7 +11,14 @@ class MyUploadDataset:
         self,
         repo_id: str,
         readme: os.PathLike,
+        **kwargs,
     ):
+        """Upload dataset arguments.
+
+        Args:
+            repo_id: huggingface repository id user/dataset_name.
+            readme: path to local README.md file.
+        """
         self.repo_id = repo_id
         self.readme = readme
 
