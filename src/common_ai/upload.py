@@ -25,6 +25,7 @@ class MyUpload:
         data_name: str,
         trial_name: str,
         ignore_patterns: list[str],
+        readme: os.PathLike,
         **kwargs,
     ) -> None:
         """Upload arguments.
@@ -38,6 +39,7 @@ class MyUpload:
             data_name: name of dataset.
             trial_name: name of trial.
             ignore_patterns: file pattern to ignore from uploading.
+            readme: path to local model card README.md file.
         """
         username = whoami()["name"]
         self.repo_id = f"{username}/{preprocess}_{model_cls}_{data_name}"
@@ -49,6 +51,7 @@ class MyUpload:
         self.data_name = data_name
         self.trial_name = trial_name
         self.ignore_patterns = ignore_patterns
+        self.readme = readme
 
     def __call__(self) -> None:
         self.upload()
@@ -78,6 +81,7 @@ class MyUpload:
                 src=self._comp_path(comp),
                 dst=upload_path / comp,
             )
+        shutil.copyfile(src=self.readme, dst=upload_path / "README.md")
 
         upload_large_folder(
             repo_id=self.repo_id,

@@ -19,7 +19,7 @@ class MyUploadDataset:
         Args:
             repo_id: huggingface repository id user/dataset_name.
             config_name: subdataset name.
-            readme: path to local README.md file.
+            readme: path to local dataset card README.md file.
         """
         self.repo_id = repo_id
         self.config_name = config_name
