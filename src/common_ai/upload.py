@@ -74,7 +74,7 @@ class MyUpload:
     def _comp_path(self, comp: Literal["checkpoints", "logs"]) -> os.PathLike:
         return self.output_dir / self.run_type / self.run_name / comp / self.preprocess / self.model_cls / self.data_name / self.trial_name
 
-    def upload(self) -> None:
+    def _copy(self) -> os.PathLike:
         upload_path = self.output_dir / "upload" / self.repo_id
         if os.path.exists(upload_path):
             shutil.rmtree(upload_path)
@@ -86,9 +86,12 @@ class MyUpload:
             )
         shutil.copyfile(src=self.readme, dst=upload_path / "README.md")
 
+        return upload_path
+
+    def upload(self) -> None:
         upload_large_folder(
             repo_id=self.repo_id,
-            folder_path=upload_path,
+            folder_path=self._copy(),
             repo_type="model",
             ignore_patterns=self.ignore_patterns,
             num_workers=self.num_workers,
@@ -96,11 +99,9 @@ class MyUpload:
 
 
     def delete(self) -> None:
-        for comp in ["checkpoints", "logs"]:
-            upload_folder(
-                repo_id=self.repo_id,
-                folder_path=self._comp_path(comp),
-                path_in_repo=comp,
-                ignore_patterns=self.ignore_patterns,
-                delete_patterns="*",
-            )
+        upload_folder(
+            repo_id=self.repo_id,
+            folder_path=self._copy(),
+            ignore_patterns=self.ignore_patterns,
+            delete_patterns="*",
+        )
