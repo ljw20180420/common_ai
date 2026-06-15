@@ -10,3 +10,4 @@ ignore_patterns:
   - "*.pdf"
   - "*.html"
 # readme:
+num_workers: 1

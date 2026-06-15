@@ -26,6 +26,7 @@ class MyUpload:
         trial_name: str,
         ignore_patterns: list[str],
         readme: os.PathLike,
+        num_workers: int,
         **kwargs,
     ) -> None:
         """Upload arguments.
@@ -40,6 +41,7 @@ class MyUpload:
             trial_name: name of trial.
             ignore_patterns: file pattern to ignore from uploading.
             readme: path to local model card README.md file.
+            num_workers: number of workers to upload parallelly.
         """
         username = whoami()["name"]
         self.repo_id = f"{username}/{preprocess}_{model_cls}_{data_name}"
@@ -52,6 +54,7 @@ class MyUpload:
         self.trial_name = trial_name
         self.ignore_patterns = ignore_patterns
         self.readme = readme
+        self.num_workers = num_workers
 
     def __call__(self) -> None:
         self.upload()
@@ -88,6 +91,7 @@ class MyUpload:
             folder_path=upload_path,
             repo_type="model",
             ignore_patterns=self.ignore_patterns,
+            num_workers=self.num_workers,
         )
 
 
