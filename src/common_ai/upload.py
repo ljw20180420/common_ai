@@ -95,13 +95,17 @@ class MyUpload:
         return upload_path
 
     def upload(self) -> None:
-        upload_large_folder(
-            repo_id=self.repo_id,
-            folder_path=self._copy(),
-            repo_type="model",
-            ignore_patterns=self.ignore_patterns,
-            num_workers=self.num_workers,
-        )
+        try:
+            upload_large_folder(
+                repo_id=self.repo_id,
+                folder_path=self._copy(),
+                repo_type="model",
+                ignore_patterns=self.ignore_patterns,
+                num_workers=self.num_workers,
+            )
+        except httpx.ConnectError as e:
+            print(e)
+            time.sleep(1)
 
 
     def delete(self) -> None:
