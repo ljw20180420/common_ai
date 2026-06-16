@@ -43,7 +43,13 @@ class MyUpload:
             readme: path to local model card README.md file.
             num_workers: number of workers to upload parallelly.
         """
-        username = whoami()["name"]
+        while True:
+            try:
+                username = whoami()["name"]
+                break
+            except httpx.ConnectError as e:
+                print(e)
+                time.sleep(1)
         self.repo_id = f"{username}/{preprocess}_{model_cls}_{data_name}"
         self.output_dir = pathlib.Path(os.fspath(output_dir))
         self.run_type = run_type
